@@ -1,15 +1,18 @@
 <div align="center">
 
+<img src="frontend/public/favicon.svg" width="120" alt="Qwen2API Logo" />
+
 # Qwen2API
 
 **Qwen Chat 账号池代理网关 · OpenAI 兼容接口**
 
-[![Docker](https://img.shields.io/docker/v/jiujiu532/qwen2api?label=Docker&logo=docker)](https://hub.docker.com/r/jiujiu532/qwen2api)
+[![Docker](https://img.shields.io/badge/ghcr.io-jiujiu532%2Fqwen2api-blue?logo=docker)](https://github.com/jiujiu532/Qwen2api/pkgs/container/qwen2api)
 [![License](https://img.shields.io/github/license/jiujiu532/Qwen2api)](LICENSE)
 
 [快速开始](#-快速开始) · [功能特性](#-功能特性) · [API 文档](#-api-文档) · [配置说明](#-配置说明) · [开发指南](#-开发)
 
 </div>
+
 
 ---
 
