@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+httpx
+pydantic-settings
+camoufox[geoip]
+tiktoken
+curl_cffi

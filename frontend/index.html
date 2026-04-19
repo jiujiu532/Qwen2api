@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Qwen2API · Enterprise Gateway</title>
+  <script>
+    (function () {
+      try {
+        var theme = localStorage.getItem('theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', theme);
+      } catch (e) { }
+    })();
+  </script>
+  <style>
+    /* ── Theme color overrides (outside Tailwind processing) ── */
+    :root {
+      --color-background: hsl(240 10% 4%);
+      --color-foreground: hsl(0 0% 100%);
+      --color-card: hsl(240 10% 7%);
+      --color-card-foreground: hsl(0 0% 100%);
+      --color-popover: hsl(240 10% 7%);
+      --color-popover-foreground: hsl(0 0% 100%);
+      --color-primary: hsl(263.4 70% 50.4%);
+      --color-primary-foreground: hsl(210 20% 98%);
+      --color-secondary: hsl(240 3.7% 12%);
+      --color-secondary-foreground: hsl(210 20% 98%);
+      --color-muted: hsl(240 3.7% 12%);
+      --color-muted-foreground: hsl(240 5% 85%);
+      --color-accent: hsl(240 3.7% 12%);
+      --color-accent-foreground: hsl(210 20% 98%);
+      --color-destructive: hsl(0 62.8% 30.6%);
+      --color-destructive-foreground: hsl(210 20% 98%);
+      --color-border: hsl(240 3.7% 15%);
+      --color-input: hsl(240 3.7% 15%);
+      --color-ring: hsl(263.4 70% 50.4%);
+    }
+
+    [data-theme='light'] {
+      --color-background: hsl(210 40% 98%);
+      --color-foreground: hsl(222.2 84% 4.9%);
+      --color-card: hsl(0 0% 100%);
+      --color-card-foreground: hsl(222.2 84% 4.9%);
+      --color-popover: hsl(0 0% 100%);
+      --color-popover-foreground: hsl(222.2 84% 4.9%);
+      --color-primary: hsl(221.2 83.2% 53.3%);
+      --color-primary-foreground: hsl(210 40% 98%);
+      --color-secondary: hsl(210 40% 96.1%);
+      --color-secondary-foreground: hsl(222.2 47.4% 11.2%);
+      --color-muted: hsl(210 40% 96.1%);
+      --color-muted-foreground: hsl(215.4 16.3% 46.9%);
+      --color-accent: hsl(210 40% 96.1%);
+      --color-accent-foreground: hsl(222.2 47.4% 11.2%);
+      --color-destructive: hsl(0 84.2% 60.2%);
+      --color-destructive-foreground: hsl(210 40% 98%);
+      --color-border: hsl(214.3 31.8% 91.4%);
+      --color-input: hsl(214.3 31.8% 91.4%);
+      --color-ring: hsl(221.2 83.2% 53.3%);
+    }
+
+    /* Sidebar backgrounds */
+    .sidebar-themed {
+      background-color: #0d0e16;
+      transition: background-color 0.5s ease;
+    }
+
+    [data-theme='light'] .sidebar-themed {
+      background-color: #ffffff;
+    }
+
+    /* Body backdrop */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      transition: all 0.5s ease;
+      background-color: #020202;
+      background-image: radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.1), transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(168, 85, 247, 0.1), transparent 40%);
+    }
+
+    [data-theme='light'] body::before {
+      background-color: #f8fafc;
+      background-image: radial-gradient(circle at 10% 20%, rgba(59, 130, 246, 0.05), transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(99, 102, 241, 0.05), transparent 40%);
+    }
+  </style>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
+</html>

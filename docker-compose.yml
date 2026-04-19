@@ -1,0 +1,24 @@
+services:
+  qwen2api:
+    image: yujunzhixue/qwen2api:latest
+    container_name: qwen2api
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "7860:7860"
+    volumes:
+      - ./data:/workspace/data
+      - ./logs:/workspace/logs
+    shm_size: '256m'
+    environment:
+      PYTHONIOENCODING: utf-8
+      PORT: "7860"
+      ENGINE_MODE: "hybrid"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/healthz"]
+      interval: 30s
+      timeout: 10s
+      start_period: 120s
+      retries: 3
