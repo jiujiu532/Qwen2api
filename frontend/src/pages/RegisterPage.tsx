@@ -250,13 +250,13 @@ export default function RegisterPage() {
                                                 <span className="text-[9px] text-muted-foreground/50 shrink-0">{hint}</span>
                                             </div>
                                         ))}
-                                        {!settings?.proxy_enabled && (
-                                            <p className="text-[10px] text-amber-500 font-black flex items-center gap-1 shrink-0">
-                                                <Info className="w-2.5 h-2.5 shrink-0" />
-                                                建议启用代理池以提高成功率
-                                            </p>
-                                        )}
                                     </div>
+                                    {!settings?.proxy_enabled && (
+                                        <p className="text-[10px] text-amber-500 font-black flex items-center gap-1">
+                                            <Info className="w-2.5 h-2.5 shrink-0" />
+                                            建议启用代理池以提高成功率
+                                        </p>
+                                    )}
                                 </div>
                             )}
 
