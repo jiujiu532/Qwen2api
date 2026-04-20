@@ -38,24 +38,29 @@ export default function RegisterPage() {
     }, [batchCount, batchThreads, batchMaxRetries, provider])
 
     useEffect(() => {
-        // 初始获取设置以检查 MoeMail 配置
-        fetch(`${API_BASE}/api/admin/settings`, { headers: getAuthHeader() })
-            .then(res => res.json())
-            .then(data => setSettings(data))
-            .catch(() => { })
+        // 获取设置（含代理开关状态）
+        const refreshSettings = () => {
+            fetch(`${API_BASE}/api/admin/settings`, { headers: getAuthHeader() })
+                .then(res => res.json())
+                .then(data => setSettings(data))
+                .catch(() => { })
+        }
+        refreshSettings()
 
         fetch(`${API_BASE}/api/admin/system-info`, { headers: getAuthHeader() })
             .then(res => res.json())
             .then(data => setSysInfo(data))
             .catch(() => { })
 
-        const intv = setInterval(() => {
+        // 每 2s 刷新日志，每 10s 同步设置（含代理开关状态）
+        const logIntv = setInterval(() => {
             fetch(`${API_BASE}/api/admin/logs`, { headers: getAuthHeader() })
                 .then(res => res.json())
                 .then(data => setLogs(data.logs || []))
                 .catch(() => { })
         }, 2000)
-        return () => clearInterval(intv)
+        const settingsIntv = setInterval(refreshSettings, 10000)
+        return () => { clearInterval(logIntv); clearInterval(settingsIntv) }
     }, [])
 
     useEffect(() => {
@@ -239,8 +244,8 @@ export default function RegisterPage() {
                                         ].map(({ label, color, val, max, hint }) => (
                                             <div key={label} className="flex-1 flex items-center gap-2">
                                                 <span className="text-[9px] text-muted-foreground/60 w-10 shrink-0">{label}</span>
-                                                <div className="flex-1 h-1 rounded-full bg-muted/30 overflow-hidden">
-                                                    <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${Math.min(100, (val / max) * 100)}%` }} />
+                                                <div className="flex-1 h-2 rounded-full bg-muted/30 overflow-hidden">
+                                                    <div className={`h-full rounded-full transition-all duration-300 ${color}`} style={{ width: `${Math.max(6, Math.min(100, (val / max) * 100))}%` }} />
                                                 </div>
                                                 <span className="text-[9px] text-muted-foreground/50 shrink-0">{hint}</span>
                                             </div>
