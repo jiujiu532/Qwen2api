@@ -157,20 +157,40 @@ socks5://host:port
 ```
 Qwen2api/
 ├── backend/                # FastAPI 后端
-│   ├── api/               # API 路由（admin, v1_chat, images, …）
-│   ├── core/              # 核心模块（账号池、引擎、健康快照、缓存）
-│   ├── services/          # 业务服务（注册、邮件、GC、提示词构建）
-│   └── main.py            # 应用入口、生命周期管理
+│   ├── api/               # API 路由
+│   │   ├── admin.py       # 管理面板 API
+│   │   ├── chat.py        # /v1/chat/completions（OpenAI 兼容）
+│   │   ├── images.py      # /v1/images/generations
+│   │   ├── anthropic.py   # Claude 兼容接口
+│   │   ├── gemini.py      # Gemini 兼容接口
+│   │   ├── responses.py   # OpenAI Responses API
+│   │   └── probes.py      # 健康探针
+│   ├── core/              # 核心模块
+│   │   ├── account_pool.py    # 账号池管理
+│   │   ├── config.py          # 配置中心
+│   │   ├── health_snapshot.py # 健康快照
+│   │   └── httpx_engine.py    # HTTP 请求引擎
+│   ├── services/          # 业务服务
+│   │   ├── register.py        # 批量注册调度
+│   │   ├── browser_register.py # 浏览器注册引擎
+│   │   ├── mail_service.py    # 邮箱服务
+│   │   └── qwen_client.py     # Qwen 会话客户端
+│   └── main.py            # 应用入口
 ├── frontend/               # React + Vite 前端
 │   └── src/
-│       ├── pages/         # 页面（Dashboard, Accounts, Tokens, …）
+│       ├── pages/         # 页面
+│       │   ├── Dashboard.tsx      # 仪表盘
+│       │   ├── AccountsPage.tsx   # 账号管理
+│       │   ├── RegisterPage.tsx   # 批量注册
+│       │   ├── TokensPage.tsx     # 密钥管理
+│       │   ├── PlaygroundPage.tsx # API 调试
+│       │   └── SettingsPage.tsx   # 系统设置
 │       ├── components/    # 公共组件
 │       └── layouts/       # 布局框架
-├── register/               # 独立账号注册工具（CLI）
+├── tools/                  # 独立工具
+│   ├── standalone_register/   # CLI 注册脚本（独立运行）
+│   └── register_cli.py       # 批量注册 CLI 入口
 ├── data/                   # 运行时数据（gitignored）
-│   ├── accounts.json      # 账号池存储
-│   ├── api_keys.json      # API Token 列表
-│   └── ...
 ├── start.py               # 一键启动脚本
 ├── Dockerfile
 └── docker-compose.yml

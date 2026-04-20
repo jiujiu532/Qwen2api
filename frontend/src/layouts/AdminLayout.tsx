@@ -160,10 +160,10 @@ export default function AdminLayout() {
 
   const navs = [
     { name: "核心监控", path: "/", icon: LayoutDashboard },
-    { name: "自动扩容", path: "/expansion", icon: Zap },
+    { name: "批量注册", path: "/register", icon: Zap },
     { name: "账号列表", path: "/accounts", icon: Activity },
     { name: "密钥管理", path: "/tokens", icon: Key },
-    { name: "交互测试", path: "/test", icon: MessageSquare },
+    { name: "Playground", path: "/playground", icon: MessageSquare },
     { name: "艺术创想", path: "/images", icon: Image },
     { name: "系统设置", path: "/settings", icon: Settings },
   ]

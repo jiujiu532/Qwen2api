@@ -50,7 +50,7 @@ const MODELS = [
   { id: "qwen-turbo", name: "Qwen Turbo" },
 ]
 
-export default function TestPage() {
+export default function PlaygroundPage() {
   const [messages, setMessages] = useState<{ role: string; content: string; reasoning_content?: string; error?: boolean }[]>([])
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)

@@ -527,7 +527,7 @@ export default function AccountsPage() {
               <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
               直连本地文件系统
             </div>
-            <Link to="/expansion" className="text-[10px] font-black text-indigo-500 hover:text-indigo-400 transition-colors flex items-center gap-1">
+            <Link to="/register" className="text-[10px] font-black text-indigo-500 hover:text-indigo-400 transition-colors flex items-center gap-1">
               前往扩容中心 <Bot className="h-3 w-3" />
             </Link>
           </div>

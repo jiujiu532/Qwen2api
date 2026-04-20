@@ -12,7 +12,7 @@ const PROVIDERS = [
     { id: "tempmail", name: "TempMail（CF Workers）", desc: "基于 Cloudflare Workers 的临时邮箱，需配置 Workers 域名与管理密码" },
 ]
 
-export default function ExpansionPage() {
+export default function RegisterPage() {
     // 从 localStorage 初始化状态
     const [batchCount, setBatchCount] = useState(() => Number(localStorage.getItem("qwen_expansion_count")) || 10)
     const [batchThreads, setBatchThreads] = useState(() => Number(localStorage.getItem("qwen_expansion_threads")) || 2)

@@ -148,7 +148,7 @@ async def anthropic_messages(request: Request):
 
             for attempt in range(max_attempts):
                 try:
-                    from backend.api.v1_chat import _stream_items_with_keepalive
+                    from backend.api.chat import _stream_items_with_keepalive
                     events = []
                     chat_id = None
                     acc = None
@@ -193,7 +193,7 @@ async def anthropic_messages(request: Request):
                     has_tc = stop == "tool_use"
 
                     # NativeBlock detection
-                    from backend.api.v1_chat import _extract_blocked_tool_names
+                    from backend.api.chat import _extract_blocked_tool_names
                     blocked = _extract_blocked_tool_names(answer_text)
                     if blocked and tool_defs and not has_tc and attempt < max_attempts - 1:
                         fxm = True
@@ -294,7 +294,7 @@ async def anthropic_messages(request: Request):
                     tool_blocks, stop = parse_tool_calls(answer_text, tool_defs)
                 has_tc = stop == "tool_use"
 
-                from backend.api.v1_chat import _extract_blocked_tool_names
+                from backend.api.chat import _extract_blocked_tool_names
                 blocked = _extract_blocked_tool_names(answer_text)
                 if blocked and tool_defs and not has_tc and attempt < max_attempts - 1:
                     fxm = True

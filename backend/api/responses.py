@@ -246,7 +246,7 @@ async def openai_responses(request: Request):
                 if not tool_blocks:
                     tool_blocks, stop = parse_tool_calls(answer_text, tool_defs)
 
-                from backend.api.v1_chat import _extract_blocked_tool_names
+                from backend.api.chat import _extract_blocked_tool_names
                 blocked = _extract_blocked_tool_names(answer_text)
                 if blocked and tool_defs and stop != "tool_use" and attempt < max_attempts - 1:
                     fxm = True
