@@ -112,7 +112,7 @@ export default function SettingsPage() {
   }
 
   const isMoe = mailTab === 'moemail'
-  const backendUrl = API_BASE || `${window.location.protocol}//${window.location.hostname}:7860`
+  const backendUrl = API_BASE || window.location.origin
 
   return (
     <div className="animate-fade-in-up max-w-[1400px] mx-auto pb-20 space-y-10">
