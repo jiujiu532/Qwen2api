@@ -11,6 +11,66 @@ from typing import Any
 
 log = logging.getLogger("qwen2api.tool_parser")
 
+# ── JSON 修复 ────────────────────────────────────────────────────────────────
+
+# 匹配无引号 key:  {name: "foo"} → {"name": "foo"}
+_UNQUOTED_KEY = re.compile(r'([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:')
+# 匹配尾随逗号:  {"a": 1,} → {"a": 1}
+_TRAILING_COMMA = re.compile(r',\s*([}\]])')
+
+
+def repair_json(raw: str) -> str:
+    """
+    尝试修复模型输出中常见的 JSON 格式错误。
+    参考 ds2api 的 RepairLooseJSON。
+    """
+    s = raw.strip()
+    if not s:
+        return s
+    # 1) 单引号 → 双引号（仅对简单情况）
+    if "'" in s and '"' not in s:
+        s = s.replace("'", '"')
+    # 2) 无引号 key → 加双引号
+    s = _UNQUOTED_KEY.sub(r'\1"\2":', s)
+    # 3) 尾随逗号
+    s = _TRAILING_COMMA.sub(r'\1', s)
+    # 4) 非法反斜杠: 只保留合法的 JSON 转义序列
+    result = []
+    i = 0
+    while i < len(s):
+        if s[i] == '\\' and i + 1 < len(s):
+            nxt = s[i + 1]
+            if nxt in ('"', '\\', '/', 'b', 'f', 'n', 'r', 't'):
+                result.append(s[i:i+2])
+                i += 2
+                continue
+            elif nxt == 'u' and i + 5 < len(s) and all(c in '0123456789abcdefABCDEF' for c in s[i+2:i+6]):
+                result.append(s[i:i+6])
+                i += 6
+                continue
+            else:
+                result.append('\\\\')
+                i += 1
+                continue
+        result.append(s[i])
+        i += 1
+    return ''.join(result)
+
+
+def _safe_json_loads(raw: str) -> dict | None:
+    """先直接解析，失败后修复重试。"""
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        pass
+    try:
+        return json.loads(repair_json(raw))
+    except (json.JSONDecodeError, ValueError):
+        return None
+
+
+# ── 工具调用匹配 ─────────────────────────────────────────────────────────────
+
 # 匹配 [TOOL_CALL]...{...}...[/TOOL_CALL]
 # 捕获 delimiters 之间的完整内容（不能用 {.*?} 因为 lazy match 停在第一个 } 导致嵌套 JSON 截断）
 _TOOL_CALL_PATTERN = re.compile(
@@ -23,6 +83,14 @@ _TOOL_CALL_PATTERN_LEGACY = re.compile(
     r'<tool_call>(.*?)</tool_call>',
     re.DOTALL
 )
+
+# 代码围栏检测：跳过 ``` 代码块内的内容
+_CODE_FENCE = re.compile(r'```[\s\S]*?```')
+
+
+def _strip_code_fences(text: str) -> str:
+    """移除代码围栏内容，避免误匹配其中的 [TOOL_CALL]。"""
+    return _CODE_FENCE.sub('', text)
 
 
 def parse_tool_calls(text: str, tools: list[dict]) -> tuple[list[dict], str]:
@@ -39,12 +107,18 @@ def parse_tool_calls(text: str, tools: list[dict]) -> tuple[list[dict], str]:
     tool_names = {t.get("name", "") for t in tools}
     blocks: list[dict] = []
 
+    # 代码围栏保护：在去除代码块后的文本上做匹配
+    safe_text = _strip_code_fences(text)
+
     # 优先匹配新格式 [TOOL_CALL]...{...}...[/TOOL_CALL]
     for pattern in (_TOOL_CALL_PATTERN, _TOOL_CALL_PATTERN_LEGACY):
-        for match in pattern.finditer(text):
+        for match in pattern.finditer(safe_text):
             try:
                 raw = match.group(1).strip()
-                data = json.loads(raw)
+                data = _safe_json_loads(raw)
+                if data is None:
+                    log.debug(f"[ToolParser] JSON 解析+修复均失败 | raw={raw[:80]}")
+                    continue
                 name = data.get("name", "")
                 inp = data.get("arguments", data.get("input", data.get("params", {})))
 
@@ -55,15 +129,15 @@ def parse_tool_calls(text: str, tools: list[dict]) -> tuple[list[dict], str]:
                         "name": name,
                         "input": inp if isinstance(inp, dict) else {},
                     })
-            except (json.JSONDecodeError, ValueError) as e:
-                log.debug(f"[ToolParser] JSON 解析失败: {e} | raw={match.group(1)[:80]}")
+            except Exception as e:
+                log.debug(f"[ToolParser] 解析异常: {e} | raw={match.group(1)[:80]}")
                 continue
         if blocks:
             break  # 优先使用新格式的结果，找到就不再找旧格式
 
     if blocks:
         # 提取工具调用之前的文本作为 text block
-        first_match = _TOOL_CALL_PATTERN.search(text) or _TOOL_CALL_PATTERN_LEGACY.search(text)
+        first_match = _TOOL_CALL_PATTERN.search(safe_text) or _TOOL_CALL_PATTERN_LEGACY.search(safe_text)
         prefix = text[:first_match.start()].strip() if first_match else ""
         result = []
         if prefix:

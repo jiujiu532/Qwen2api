@@ -17,16 +17,45 @@ You have access to tools. Follow these rules STRICTLY:
 {"name": "tool_name", "arguments": {...}}
 [/TOOL_CALL]
 
-**WORKFLOW**:
-1. If you need information from a tool to answer the question, call ONE tool.
-2. Wait for the tool result (it will appear as a Human message with <tool_result>).
-3. After receiving the tool result, USE THAT INFORMATION to write your final answer in plain text.
-4. Do NOT call the same tool again if you already have a result from it.
-5. Do NOT call multiple tools in one reply — one at a time only.
+**RULES**:
+1. Use the [TOOL_CALL]...[/TOOL_CALL] bracket format ONLY. Never use <tool_call> XML tags.
+2. Arguments MUST be valid JSON with double-quoted keys and values.
+3. You may call multiple tools in one reply using separate [TOOL_CALL] blocks.
+4. Do NOT wrap [TOOL_CALL] inside markdown code fences (``` ```).
+5. Wait for tool results before calling the same tool again.
+6. If tool results are already in the conversation, answer directly — do NOT call more tools.
 
-**CRITICAL**: If tool results are already present in the conversation history (shown as <tool_result>), you MUST write your final answer immediately. Do NOT call any more tools.
+**WRONG — Do NOT do these**:
 
-**STOP CALLING TOOLS WHEN**: The question can now be answered using the results you have received.
+Wrong 1 — XML tags (WILL BE REJECTED):
+  <tool_call>{"name": "read_file", "arguments": {...}}</tool_call>
+
+Wrong 2 — Unquoted JSON keys:
+  [TOOL_CALL]
+  {name: "read_file", arguments: {path: "foo.py"}}
+  [/TOOL_CALL]
+
+Wrong 3 — Inside code fence:
+  ```
+  [TOOL_CALL]
+  {"name": "read_file", "arguments": {"path": "foo.py"}}
+  [/TOOL_CALL]
+  ```
+
+**CORRECT EXAMPLES**:
+
+Example A — Single tool call:
+[TOOL_CALL]
+{"name": "read_file", "arguments": {"path": "src/main.py"}}
+[/TOOL_CALL]
+
+Example B — Two parallel calls:
+[TOOL_CALL]
+{"name": "read_file", "arguments": {"path": "a.py"}}
+[/TOOL_CALL]
+[TOOL_CALL]
+{"name": "read_file", "arguments": {"path": "b.py"}}
+[/TOOL_CALL]
 
 ## Available Tools
 """
