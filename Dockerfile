@@ -57,6 +57,9 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 # Download Camoufox browser at build time
 RUN python -m camoufox fetch
 
+# Install Playwright Chromium for account registration (browser_register.py)
+RUN python -m playwright install chromium
+
 COPY backend/ ./backend/
 COPY start.py ./
 COPY --from=frontend-builder /app/dist ./frontend/dist
