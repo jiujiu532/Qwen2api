@@ -5,3 +5,4 @@ pydantic-settings
 camoufox[geoip]
 tiktoken
 curl_cffi
+psutil
