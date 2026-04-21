@@ -1,0 +1,66 @@
+version: "3.8"
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: qwen-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    networks:
+      - qwen-net
+    command: redis-server --save 60 1 --loglevel warning
+
+  gateway:
+    image: ghcr.io/jiujiu532/qwengateway:latest
+    container_name: qwen-gateway
+    restart: unless-stopped
+    depends_on:
+      - redis
+    environment:
+      - GATEWAY_ADDR=:8080
+      - REDIS_ADDR=redis:6379
+      - REDIS_PASSWORD=
+      - PYTHON_INTERNAL=http://127.0.0.1:7860/internal
+      - GATEWAY_API_KEY=${GATEWAY_API_KEY:-}
+    ports:
+      - "8080:8080"
+    networks:
+      - qwen-net
+
+  backend:
+    image: ghcr.io/jiujiu532/qwen2api:latest
+    container_name: qwen-backend
+    restart: unless-stopped
+    depends_on:
+      - redis
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - SECRET_KEY=${SECRET_KEY:-changeme}
+    ports:
+      - "7860:7860"
+    volumes:
+      - app_data:/app/data
+    networks:
+      - qwen-net
+
+  nginx:
+    image: nginx:alpine
+    container_name: qwen-nginx
+    restart: unless-stopped
+    depends_on:
+      - gateway
+      - backend
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - qwen-net
+
+volumes:
+  redis_data:
+  app_data:
+
+networks:
+  qwen-net:

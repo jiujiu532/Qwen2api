@@ -47,3 +47,10 @@ frontend/_debug_raw.txt
 # Browser temp files
 browser_data/
 captures/
+
+#  QwenGateway build artifacts 
+QwenGateway/*.exe
+QwenGateway/gw.log
+QwenGateway/gw_err.log
+QwenGateway/debug.log
+QwenGateway/local_start.bat
