@@ -123,6 +123,8 @@ def save_runtime_settings():
         val = getattr(settings, key, None)
         if val is not None:
             data[key] = val
+    # MODEL_MAP 单独持久化
+    data["MODEL_MAP"] = dict(MODEL_MAP)
     try:
         _RUNTIME_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
         with open(_RUNTIME_CONFIG_FILE, "w", encoding="utf-8") as f:
@@ -138,6 +140,10 @@ def _load_runtime_settings():
         with open(_RUNTIME_CONFIG_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
         for key, val in data.items():
+            if key == "MODEL_MAP" and isinstance(val, dict):
+                MODEL_MAP.clear()
+                MODEL_MAP.update(val)
+                continue
             if key in _PERSIST_KEYS and hasattr(settings, key):
                 expected_type = type(getattr(settings, key))
                 try:
@@ -148,49 +154,12 @@ def _load_runtime_settings():
     except Exception as e:
         logging.getLogger("qwen2api").warning(f"加载运行时设置失败: {e}")
 
-_load_runtime_settings()
+# 全局映射（默认为空——用户在管理后台自行配置，保存后写入 runtime_settings.json）
+# 修复：不再硬编码默认值，避免用户清空后每次重启自动恢复
+MODEL_MAP: dict = {}
 
-# 全局映射
-MODEL_MAP = {
-    # OpenAI
-    "gpt-4o":            "qwen3.6-plus",
-    "gpt-4o-mini":       "qwen3.6-plus",
-    "gpt-4-turbo":       "qwen3.6-plus",
-    "gpt-4":             "qwen3.6-plus",
-    "gpt-4.1":           "qwen3.6-plus",
-    "gpt-4.1-mini":      "qwen3.6-plus",
-    "gpt-3.5-turbo":     "qwen3.6-plus",
-    "gpt-5":             "qwen3.6-plus",
-    "o1":                "qwen3.6-plus",
-    "o1-mini":           "qwen3.6-plus",
-    "o3":                "qwen3.6-plus",
-    "o3-mini":           "qwen3.6-plus",
-    # Anthropic
-    "claude-opus-4-6":           "qwen3.6-plus",
-    "claude-sonnet-4-6":         "qwen3.6-plus",
-    "claude-sonnet-4-5":         "qwen3.6-plus",
-    "claude-3-opus":             "qwen3.6-plus",
-    "claude-3-5-sonnet":         "qwen3.6-plus",
-    "claude-3-5-sonnet-latest":  "qwen3.6-plus",
-    "claude-3-sonnet":           "qwen3.6-plus",
-    "claude-3-haiku":            "qwen3.6-plus",
-    "claude-3-5-haiku":          "qwen3.6-plus",
-    "claude-3-5-haiku-latest":   "qwen3.6-plus",
-    "claude-haiku-4-5":          "qwen3.6-plus",
-    # Gemini
-    "gemini-2.5-pro":    "qwen3.6-plus",
-    "gemini-2.5-flash":  "qwen3.6-plus",
-    "gemini-1.5-pro":    "qwen3.6-plus",
-    "gemini-1.5-flash":  "qwen3.6-plus",
-    # Qwen aliases
-    "qwen":              "qwen3.6-plus",
-    "qwen-max":          "qwen3.6-plus",
-    "qwen-plus":         "qwen3.6-plus",
-    "qwen-turbo":        "qwen3.6-plus",
-    # DeepSeek
-    "deepseek-chat":     "qwen3.6-plus",
-    "deepseek-reasoner": "qwen3.6-plus",
-}
+# 启动时从持久化文件恢复（包括 MODEL_MAP）
+_load_runtime_settings()
 
 # 图片生成沿用网页当前真实可用的基础模型，不再写死 wanx 模型名
 IMAGE_MODEL_DEFAULT = "qwen3.6-plus"
