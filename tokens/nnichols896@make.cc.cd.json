@@ -1,0 +1,16 @@
+[
+  {
+    "email": "nnichols896@make.cc.cd",
+    "password": "AlIlzHZkJ4zG6J",
+    "token": "oVLH3YrMVE34vpsiow0W25jUWcDH_DIf4UhGZ_UcegTWmFEyN_mkngA6eyWRj2PUcNUwcqRnpaphnBGi9Cl_fQ",
+    "cookies": "acw_tc=0a06abd817758854285157278e417949be0ae4b40159221f99867a4a3c2cad; x-ap=ap-northeast-1; token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjA2NTIyYzA3LTFlOWYtNGVlMi1hYzE2LWQzOTUxODFhZjk0MCIsImxhc3RfcGFzc3dvcmRfY2hhbmdlIjoxNzc1ODg1NDI4LCJleHAiOjE3Nzg0Nzc0Mjh9.VU_V-CprTDZXjC0lQ42xmgsIpq1ISfnIpjlzjEPPMrw",
+    "username": "1asdaw",
+    "activation_pending": false,
+    "status_code": "valid",
+    "last_error": "",
+    "last_request_started": 0.0,
+    "last_request_finished": 0.0,
+    "consecutive_failures": 0,
+    "rate_limit_strikes": 0
+  }
+]

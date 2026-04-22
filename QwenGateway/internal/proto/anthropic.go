@@ -34,20 +34,34 @@ type ContentBlock struct {
 }
 
 // AnthropicToOpenAI converts a Claude request to our internal OpenAI format.
+// Properly handles multi-turn tool conversations:
+//   - tool_use blocks in assistant messages → OpenAIMessage with ToolCalls
+//   - tool_result blocks in user messages → OpenAIMessage{Role:"tool"} with ToolCallID
 func AnthropicToOpenAI(req AnthropicRequest) OpenAIRequest {
 	var messages []OpenAIMessage
 
-	// Inject system message if present (can be string or array of content blocks)
+	// Inject system message if present (can be string or array of content blocks).
 	if req.System != nil {
-		systemText := extractAnthropicContent(req.System)
+		systemText := flattenContentToText(req.System)
 		if systemText != "" {
 			messages = append(messages, OpenAIMessage{Role: "system", Content: systemText})
 		}
 	}
 
 	for _, m := range req.Messages {
-		text := extractAnthropicContent(m.Content)
-		messages = append(messages, OpenAIMessage{Role: m.Role, Content: text})
+		switch m.Role {
+		case "assistant":
+			// Check if this assistant message contains tool_use blocks.
+			msgs := expandAssistantMessage(m)
+			messages = append(messages, msgs...)
+		case "user":
+			// Check if this user message contains tool_result blocks.
+			msgs := expandUserMessage(m)
+			messages = append(messages, msgs...)
+		default:
+			text := flattenContentToText(m.Content)
+			messages = append(messages, OpenAIMessage{Role: m.Role, Content: text})
+		}
 	}
 
 	return OpenAIRequest{
@@ -56,6 +70,196 @@ func AnthropicToOpenAI(req AnthropicRequest) OpenAIRequest {
 		Stream:   req.Stream,
 		Tools:    req.GetTools(),
 	}
+}
+
+// expandAssistantMessage handles assistant messages with potential tool_use blocks.
+// tool_use → OpenAIToolCall; regular text → Content string.
+func expandAssistantMessage(m AnthropicMessage) []OpenAIMessage {
+	blocks, ok := toContentBlocks(m.Content)
+	if !ok {
+		// Plain string content.
+		return []OpenAIMessage{{Role: "assistant", Content: flattenContentToText(m.Content)}}
+	}
+
+	var textParts []string
+	var toolCalls []openAIToolCallRaw
+
+	for _, b := range blocks {
+		blockType, _ := b["type"].(string)
+		switch blockType {
+		case "text":
+			if t, ok := b["text"].(string); ok && strings.TrimSpace(t) != "" {
+				textParts = append(textParts, t)
+			}
+		case "tool_use":
+			name, _ := b["name"].(string)
+			id, _ := b["id"].(string)
+			if id == "" {
+				id = "call_" + uuid.New().String()[:8]
+			}
+			inputBytes, _ := json.Marshal(b["input"])
+			toolCalls = append(toolCalls, openAIToolCallRaw{
+				ID:        id,
+				Type:      "function",
+				FuncName:  name,
+				Arguments: string(inputBytes),
+			})
+		}
+	}
+
+	var out []OpenAIMessage
+	// Text part first (if any).
+	textContent := strings.Join(textParts, "\n")
+	if len(toolCalls) > 0 {
+		// Build the assistant message with tool_calls.
+		calls := make([]toolcall.OpenAIToolCall, 0, len(toolCalls))
+		for _, tc := range toolCalls {
+			calls = append(calls, toolcall.OpenAIToolCall{
+				ID:   tc.ID,
+				Type: "function",
+				Function: toolcall.OpenAIFunctionCall{
+					Name:      tc.FuncName,
+					Arguments: tc.Arguments,
+				},
+			})
+		}
+		out = append(out, OpenAIMessage{
+			Role:      "assistant",
+			Content:   textContent,
+			ToolCalls: calls,
+		})
+	} else {
+		if textContent == "" {
+			textContent = " " // prevent empty assistant messages
+		}
+		out = append(out, OpenAIMessage{Role: "assistant", Content: textContent})
+	}
+	return out
+}
+
+// expandUserMessage handles user messages that may contain tool_result blocks.
+// tool_result blocks become role:tool messages (preserving tool_use_id).
+// Regular text blocks become a single user message.
+func expandUserMessage(m AnthropicMessage) []OpenAIMessage {
+	blocks, ok := toContentBlocks(m.Content)
+	if !ok {
+		return []OpenAIMessage{{Role: "user", Content: flattenContentToText(m.Content)}}
+	}
+
+	var out []OpenAIMessage
+	var userTextParts []string
+
+	for _, b := range blocks {
+		blockType, _ := b["type"].(string)
+		switch blockType {
+		case "tool_result":
+			// tool_result → role:tool message preserving tool_use_id.
+			toolUseID, _ := b["tool_use_id"].(string)
+			resultText := extractToolResultContent(b["content"])
+			out = append(out, OpenAIMessage{
+				Role:       "tool",
+				Content:    resultText,
+				ToolCallID: toolUseID,
+			})
+		case "text":
+			if t, ok := b["text"].(string); ok && strings.TrimSpace(t) != "" {
+				userTextParts = append(userTextParts, t)
+			}
+		default:
+			// Other block types: try to extract text.
+			if t, ok := b["text"].(string); ok && t != "" {
+				userTextParts = append(userTextParts, t)
+			}
+		}
+	}
+
+	// Prepend any regular user text.
+	if len(userTextParts) > 0 {
+		out = append([]OpenAIMessage{{Role: "user", Content: strings.Join(userTextParts, "\n")}}, out...)
+	}
+	if len(out) == 0 {
+		out = append(out, OpenAIMessage{Role: "user", Content: flattenContentToText(m.Content)})
+	}
+	return out
+}
+
+// toContentBlocks tries to interpret content as a []map[string]any block list.
+func toContentBlocks(content any) ([]map[string]any, bool) {
+	arr, ok := content.([]any)
+	if !ok {
+		return nil, false
+	}
+	var blocks []map[string]any
+	for _, item := range arr {
+		if b, ok := item.(map[string]any); ok {
+			blocks = append(blocks, b)
+		}
+	}
+	return blocks, len(blocks) > 0
+}
+
+// extractToolResultContent extracts text from a tool_result's content field.
+func extractToolResultContent(content any) string {
+	switch tc := content.(type) {
+	case string:
+		return tc
+	case []any:
+		var parts []string
+		for _, item := range tc {
+			if m, ok := item.(map[string]any); ok {
+				if t, ok := m["text"].(string); ok {
+					parts = append(parts, t)
+				}
+			}
+		}
+		return strings.Join(parts, "\n")
+	default:
+		b, _ := json.Marshal(content)
+		return string(b)
+	}
+}
+
+// flattenContentToText converts any content type to a plain string.
+// Used for system messages and simple user/assistant messages.
+func flattenContentToText(content any) string {
+	switch v := content.(type) {
+	case string:
+		return v
+	case []any:
+		var parts []string
+		for _, block := range v {
+			if b, ok := block.(map[string]any); ok {
+				blockType, _ := b["type"].(string)
+				switch blockType {
+				case "text":
+					if t, ok := b["text"].(string); ok {
+						parts = append(parts, t)
+					}
+				case "tool_result":
+					text := extractToolResultContent(b["content"])
+					if text != "" {
+						parts = append(parts, "[Tool Result: "+text+"]")
+					}
+				case "tool_use":
+					name, _ := b["name"].(string)
+					inputBytes, _ := json.Marshal(b["input"])
+					parts = append(parts, fmt.Sprintf("[Tool call: %s(%s)]", name, string(inputBytes)))
+				}
+			}
+		}
+		return strings.Join(parts, "\n")
+	default:
+		b, _ := json.Marshal(v)
+		return string(b)
+	}
+}
+
+// openAIToolCallRaw is a temporary struct for building tool call arrays.
+type openAIToolCallRaw struct {
+	ID        string
+	Type      string
+	FuncName  string
+	Arguments string
 }
 
 // GetTools parses the raw tools field, returning nil if it's "[undefined]" or invalid.
@@ -74,48 +278,21 @@ func (r AnthropicRequest) GetTools() []toolcall.Tool {
 	return tools
 }
 
-func extractAnthropicContent(content any) string {
-	switch v := content.(type) {
-	case string:
-		return v
-	case []any:
-		var parts []string
-		for _, block := range v {
-			if b, ok := block.(map[string]any); ok {
-				blockType, _ := b["type"].(string)
-				switch blockType {
-				case "text":
-					if t, ok := b["text"].(string); ok {
-						parts = append(parts, t)
-					}
-				case "tool_result":
-					// Include tool execution results so the model knows what happened.
-					switch tc := b["content"].(type) {
-					case string:
-						parts = append(parts, tc)
-					case []any:
-						for _, item := range tc {
-							if m, ok := item.(map[string]any); ok {
-								if t, ok := m["text"].(string); ok {
-									parts = append(parts, t)
-								}
-							}
-						}
-					}
-				case "tool_use":
-					// Represent outgoing tool calls as context so multi-turn works.
-					name, _ := b["name"].(string)
-					inputBytes, _ := json.Marshal(b["input"])
-					parts = append(parts, fmt.Sprintf("[Tool call: %s(%s)]", name, string(inputBytes)))
-				}
-			}
+// EstimateInputTokens estimates the number of input tokens from messages.
+func EstimateInputTokens(messages []OpenAIMessage) int {
+	total := 0
+	for _, m := range messages {
+		total += len([]rune(m.Content)) / 4
+		for _, tc := range m.ToolCalls {
+			total += len([]rune(tc.Function.Arguments)) / 4
 		}
-		return strings.Join(parts, "\n")
-	default:
-		b, _ := json.Marshal(v)
-		return string(b)
 	}
+	if total < 1 {
+		total = 1
+	}
+	return total
 }
+
 
 // BuildAnthropicStreamChunk produces a Claude-compatible SSE delta chunk.
 func BuildAnthropicStreamChunk(msgID, model, text string, inputTokens int) []string {

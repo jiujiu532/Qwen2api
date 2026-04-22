@@ -1,0 +1,16 @@
+[
+  {
+    "email": "hhudson461@qemvbbi.shop",
+    "password": "3e44fb4816bed138eb46440954b79b3518d6cde7a58248d770410cb6be563c89",
+    "token": "4Sbr3oZXDHve2XoT_p70ggnUAVeh72bpeX-_R0eQnOBAZ3340G3YFNPcUAR0j8papvULEEyr-jlJpdC8XP-xmg",
+    "cookies": "acw_tc=0a06abd517758851159741753e1d117689ff43ca738589266569b5cf68762d; x-ap=ap-northeast-1; token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImZmYTY2MWE2LTAzMTItNGNhNS04MGZjLTRlOWU0ZTJjYmI5ZiIsImxhc3RfcGFzc3dvcmRfY2hhbmdlIjoxNzc1ODg1MTE2LCJleHAiOjE3Nzg0NzcxMTZ9._u_yWNSt0VboKhjNL8psTJnhsQE7f3d0fekh0z6zzq4",
+    "username": "1asdaw",
+    "activation_pending": false,
+    "status_code": "valid",
+    "last_error": "",
+    "last_request_started": 0.0,
+    "last_request_finished": 0.0,
+    "consecutive_failures": 0,
+    "rate_limit_strikes": 0
+  }
+]

@@ -2,7 +2,6 @@ package toolcall
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 )
 
@@ -20,48 +19,88 @@ type ToolFunc struct {
 }
 
 // BuildSystemPrompt constructs the tool-calling system prompt.
+// Uses XML <tool_calls> format consistent with the XML parser (Layer 1).
 func BuildSystemPrompt(tools []Tool) string {
 	if len(tools) == 0 {
 		return ""
 	}
 	toolsJSON, _ := json.MarshalIndent(tools, "", "  ")
-	var names []string
-	for _, t := range tools {
-		names = append(names, t.Function.Name)
-	}
-	nameList := strings.Join(names, ", ")
 
-	lines := []string{
-		"You are a helpful assistant with access to the following tools:",
-		string(toolsJSON),
-		"",
-		"## Rules for Tool Calling",
-		"",
-		fmt.Sprintf("You MUST use this EXACT format: [TOOL_CALL]{\"name\": \"tool_name\", \"parameters\": {\"key\": \"value\"}}[/TOOL_CALL]"),
-		fmt.Sprintf("Available tools: %s", nameList),
-		"",
-		"## Critical Rules",
-		"1. Use ONLY JSON with double-quoted keys inside [TOOL_CALL]...[/TOOL_CALL]",
-		"2. Do NOT wrap tool calls in markdown code fences (triple backticks)",
-		"3. You MAY call multiple tools; place each on its own line",
-		"4. Parameters must exactly match the tool schema",
-		"",
-		"## Wrong Examples (DO NOT DO THIS)",
-		"",
-		"Wrong 1 - XML: <tool_call><name>fn</name><parameters>{\"k\":\"v\"}</parameters></tool_call>",
-		"Wrong 2 - Unquoted keys: [TOOL_CALL]{name: \"fn\", parameters: {k: \"v\"}}[/TOOL_CALL]",
-		"Wrong 3 - Code fence: ```json\\n[TOOL_CALL]...[/TOOL_CALL]\\n```",
-		"",
-		"## Correct Examples",
-		"",
-		"Single: [TOOL_CALL]{\"name\": \"search\", \"parameters\": {\"query\": \"Go async\"}}[/TOOL_CALL]",
-		"",
-		"Parallel:",
-		"[TOOL_CALL]{\"name\": \"weather\", \"parameters\": {\"city\": \"Beijing\"}}[/TOOL_CALL]",
-		"[TOOL_CALL]{\"name\": \"weather\", \"parameters\": {\"city\": \"Shanghai\"}}[/TOOL_CALL]",
-		"",
-		"## Anchor",
-		"Always follow these rules exactly.",
+	// Pick representative tool names for examples.
+	ex1, ex2 := "read_file", "write_to_file"
+	for _, t := range tools {
+		n := t.Function.Name
+		if ex1 == "read_file" && (strings.Contains(n, "read") || strings.Contains(n, "list") || strings.Contains(n, "search")) {
+			ex1 = n
+		}
+		if ex2 == "write_to_file" && (strings.Contains(n, "write") || strings.Contains(n, "exec") || strings.Contains(n, "run") || strings.Contains(n, "bash")) {
+			ex2 = n
+		}
 	}
-	return strings.Join(lines, "\n")
+	// If only one tool available, use it for both examples.
+	if len(tools) == 1 {
+		ex1 = tools[0].Function.Name
+		ex2 = ex1
+	}
+
+	return `You are a helpful assistant with access to the following tools:
+
+` + string(toolsJSON) + `
+
+## Tool Call Format — Follow Exactly
+
+<tool_calls>
+  <tool_call>
+    <tool_name>TOOL_NAME_HERE</tool_name>
+    <parameters>
+      <PARAMETER_NAME><![CDATA[PARAMETER_VALUE]]></PARAMETER_NAME>
+    </parameters>
+  </tool_call>
+</tool_calls>
+
+## Rules
+1. Use ONLY the <tool_calls> XML format. Never emit JSON, function-call syntax, or [TOOL_CALL] brackets.
+2. Put one or more <tool_call> entries under a single <tool_calls> root.
+3. All string values MUST use <![CDATA[...]]>, including short values, paths, queries, and code.
+4. Numbers, booleans, and null stay as plain text (no CDATA).
+5. Nested objects use nested XML elements. Arrays repeat the same tag.
+6. Do NOT wrap XML in triple-backtick markdown code fences.
+7. Use only parameter names from the tool schema.
+
+## Wrong Examples (DO NOT DO THIS)
+Wrong 1 — JSON format: {"name": "` + ex1 + `", "parameters": {"path": "x"}}
+Wrong 2 — [TOOL_CALL] brackets: [TOOL_CALL]{"name": "` + ex1 + `"}[/TOOL_CALL]
+Wrong 3 — Markdown fences: wrap XML in backticks
+
+## Correct Examples
+
+Single tool:
+<tool_calls>
+  <tool_call>
+    <tool_name>` + ex1 + `</tool_name>
+    <parameters>
+      <path><![CDATA[src/main.go]]></path>
+    </parameters>
+  </tool_call>
+</tool_calls>
+
+Two tools in parallel:
+<tool_calls>
+  <tool_call>
+    <tool_name>` + ex1 + `</tool_name>
+    <parameters>
+      <path><![CDATA[README.md]]></path>
+    </parameters>
+  </tool_call>
+  <tool_call>
+    <tool_name>` + ex2 + `</tool_name>
+    <parameters>
+      <path><![CDATA[output.txt]]></path>
+      <content><![CDATA[Hello world]]></content>
+    </parameters>
+  </tool_call>
+</tool_calls>
+
+Always place the <tool_calls> block at the END of your response.
+`
 }

@@ -1,0 +1,16 @@
+[
+  {
+    "email": "amorrison038@catsredeem.com",
+    "password": "AlIlzHZkJ4zG6J",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImEyMTY0ZmYzLTZiMzktNDQyOS1iYjk3LWE1ZjQwNDhiYzVmMSIsImxhc3RfcGFzc3dvcmRfY2hhbmdlIjoxNzc1ODg1OTM3LCJleHAiOjE3Nzg0Nzc5Mzd9.Wx4-TE1NeihX5zQzUc6Mt_1s3Q51SH1yI6CZhsk9zlY",
+    "cookies": "acw_tc=0a03e59617758859369931730e61d9064f7f7ab05c8b2c67ad1ee1fa0afe66; x-ap=ap-northeast-1; token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImEyMTY0ZmYzLTZiMzktNDQyOS1iYjk3LWE1ZjQwNDhiYzVmMSIsImxhc3RfcGFzc3dvcmRfY2hhbmdlIjoxNzc1ODg1OTM3LCJleHAiOjE3Nzg0Nzc5Mzd9.Wx4-TE1NeihX5zQzUc6Mt_1s3Q51SH1yI6CZhsk9zlY",
+    "username": "1asdaw",
+    "activation_pending": false,
+    "status_code": "valid",
+    "last_error": "",
+    "last_request_started": 0.0,
+    "last_request_finished": 0.0,
+    "consecutive_failures": 0,
+    "rate_limit_strikes": 0
+  }
+]

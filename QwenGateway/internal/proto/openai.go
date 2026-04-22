@@ -2,7 +2,6 @@
 package proto
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -21,8 +20,10 @@ type OpenAIRequest struct {
 
 // OpenAIMessage is a single message in the conversation.
 type OpenAIMessage struct {
-	Role    string `json:"role"`
-	Content any    `json:"content"` // string or []ContentPart
+	Role       string                   `json:"role"`
+	Content    string                   `json:"content"` // text content
+	ToolCalls  []toolcall.OpenAIToolCall `json:"tool_calls,omitempty"`  // for assistant messages with tool use
+	ToolCallID string                   `json:"tool_call_id,omitempty"` // for role:tool result messages
 }
 
 // 鈹€鈹€ Model Configuration 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
@@ -201,10 +202,27 @@ func MessagesToContent(req OpenAIRequest) (string, error) {
 	}
 
 	for _, msg := range req.Messages {
-		text, err := extractMessageText(msg)
-		if err != nil {
-			return "", err
+		text := msg.Content
+
+		// For assistant messages with tool calls, append the tool call XML to context.
+		if msg.Role == "assistant" && len(msg.ToolCalls) > 0 {
+			var tcXMLParts []string
+			for _, tc := range msg.ToolCalls {
+				tcXMLParts = append(tcXMLParts, fmt.Sprintf(
+					"  <tool_call>\n    <tool_name>%s</tool_name>\n    <parameters>%s</parameters>\n  </tool_call>",
+					tc.Function.Name, tc.Function.Arguments,
+				))
+			}
+			if len(tcXMLParts) > 0 {
+				toolXML := "<tool_calls>\n" + strings.Join(tcXMLParts, "\n") + "\n</tool_calls>"
+				if text != "" {
+					text = text + "\n\n" + toolXML
+				} else {
+					text = toolXML
+				}
+			}
 		}
+
 		switch msg.Role {
 		case "system":
 			parts = append(parts, "[SYSTEM]\n"+text)
@@ -213,7 +231,12 @@ func MessagesToContent(req OpenAIRequest) (string, error) {
 		case "assistant":
 			parts = append(parts, "[ASSISTANT]\n"+text)
 		case "tool":
-			parts = append(parts, "[TOOL_RESULT]\n"+text)
+			// Include the tool_call_id for traceability.
+			if msg.ToolCallID != "" {
+				parts = append(parts, "[TOOL_RESULT id="+msg.ToolCallID+"]\n"+text)
+			} else {
+				parts = append(parts, "[TOOL_RESULT]\n"+text)
+			}
 		default:
 			parts = append(parts, text)
 		}
@@ -221,30 +244,3 @@ func MessagesToContent(req OpenAIRequest) (string, error) {
 	return strings.Join(parts, "\n\n"), nil
 }
 
-func extractMessageText(msg OpenAIMessage) (string, error) {
-	switch v := msg.Content.(type) {
-	case string:
-		return v, nil
-	case []any:
-		// Multi-part content (text + image)
-		var texts []string
-		for _, part := range v {
-			if p, ok := part.(map[string]any); ok {
-				if p["type"] == "text" {
-					if t, ok := p["text"].(string); ok {
-						texts = append(texts, t)
-					}
-				}
-			}
-		}
-		return strings.Join(texts, "\n"), nil
-	case nil:
-		return "", nil
-	default:
-		b, err := json.Marshal(v)
-		if err != nil {
-			return "", fmt.Errorf("cannot marshal message content: %w", err)
-		}
-		return string(b), nil
-	}
-}

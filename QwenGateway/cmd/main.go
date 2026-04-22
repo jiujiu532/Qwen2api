@@ -243,35 +243,37 @@ func main() {
 		defer winner.Cancel()
 		pm.RecordSuccess(winner.Account, winner.LatencyMs)
 
-		nw := &nullWriter{h: http.Header{}}
-		result := proxy.StreamSSE(nw, winner.Resp.Body, winner.Resp.StatusCode, msgID, openaiReq.Model, openaiReq.Tools)
+		// Estimate input tokens from converted messages.
+		inputTokenEst := proto.EstimateInputTokens(openaiReq.Messages)
 
 		if req.Stream {
-			w := c.Writer
-			w.Header().Set("Content-Type", "text/event-stream")
-			w.Header().Set("Cache-Control", "no-cache")
-			w.Header().Set("Connection", "keep-alive")
-			flusher, canFlush := w.(http.Flusher)
-			var chunks []string
-			if len(result.ToolCalls) > 0 {
-				chunks = proto.BuildAnthropicToolUseStreamChunk(msgID, openaiReq.Model, result.ToolCalls)
-			} else {
-				chunks = proto.BuildAnthropicStreamChunk(msgID, openaiReq.Model, result.FullText, 0)
-			}
-			for _, ch := range chunks {
-				fmt.Fprintf(w, "%s\n\n", ch)
-				if canFlush {
-					flusher.Flush()
-				}
-			}
+			// Real-time streaming: convert Qwen SSE → Claude SSE token by token.
+			proxy.AnthropicStreamToClient(
+				c.Writer,
+				winner.Resp.Body,
+				winner.Resp.StatusCode,
+				msgID,
+				openaiReq.Model,
+				openaiReq.Tools,
+				inputTokenEst,
+			)
 		} else {
+			// Non-streaming: collect full response then format as Claude JSON.
+			nw := &nullWriter{h: http.Header{}}
+			result := proxy.StreamSSE(nw, winner.Resp.Body, winner.Resp.StatusCode, msgID, openaiReq.Model, openaiReq.Tools)
 			if len(result.ToolCalls) > 0 {
 				c.JSON(http.StatusOK, proto.BuildAnthropicToolCallResponse(openaiReq.Model, result.ToolCalls))
 			} else {
-				c.JSON(http.StatusOK, proto.BuildAnthropicTextResponse(openaiReq.Model, result.FullText))
+				resp := proto.BuildAnthropicTextResponse(openaiReq.Model, result.FullText)
+				// Update usage with actual estimated tokens.
+				if usage, ok := resp["usage"].(map[string]any); ok {
+					usage["input_tokens"] = inputTokenEst
+				}
+				c.JSON(http.StatusOK, resp)
 			}
 		}
 	})
+
 
 	// ── Gemini /v1beta/models/* ───────────────────────────────────────────────
 	r.POST("/v1beta/models/*modelaction", func(c *gin.Context) {
