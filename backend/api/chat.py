@@ -29,12 +29,12 @@ def _t2i_user_error(err_str: str) -> str:
         return "图片生成失败: 账号认证异常，系统正在自动修复"
     return f"图片生成失败: {err_str[:200]}"
 
-async def _stream_items_with_keepalive(client, model: str, prompt: str, has_custom_tools: bool, xml_mode: bool = False, exclude_accounts=None, thinking: bool = None):
+async def _stream_items_with_keepalive(client, model: str, prompt: str, has_custom_tools: bool, xml_mode: bool = False, exclude_accounts=None, thinking: bool = None, files: list = None):
     queue: aio.Queue = aio.Queue()
 
     async def _producer():
         try:
-            async for item in client.chat_stream_events_with_retry(model, prompt, has_custom_tools=has_custom_tools, xml_mode=xml_mode, exclude_accounts=exclude_accounts, thinking=thinking):
+            async for item in client.chat_stream_events_with_retry(model, prompt, has_custom_tools=has_custom_tools, xml_mode=xml_mode, exclude_accounts=exclude_accounts, thinking=thinking, files=files):
                 await queue.put(("item", item))
         except Exception as e:
             await queue.put(("error", e))
@@ -203,6 +203,22 @@ async def chat_completions(request: Request):
     log.info(f"[OAI] model={qwen_model}, stream={stream}, tools={[t.get('name') for t in tools]}, thinking={req_thinking}, prompt_len={len(prompt)}")
     history_messages = req_data.get("messages", [])
 
+    # 多模态：检测消息中的图片，自动上传到 Qwen OSS
+    qwen_files = []
+    from backend.services.file_upload import extract_and_upload_images
+    if any(isinstance(m.get("content"), list) for m in history_messages):
+        # 获取一个账号 token 用于上传
+        upload_acc = await client.account_pool.acquire_wait(timeout=10)
+        if upload_acc:
+            try:
+                qwen_files = await extract_and_upload_images(history_messages, upload_acc.token)
+                if qwen_files:
+                    log.info(f"[OAI] 多模态：已上传 {len(qwen_files)} 个文件到 Qwen OSS")
+            except Exception as e:
+                log.warning(f"[OAI] 多模态上传失败: {e}")
+            finally:
+                client.account_pool.release(upload_acc)
+
     completion_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
     created = int(time.time())
 
@@ -286,7 +302,7 @@ async def chat_completions(request: Request):
                 if not tools:
                     sent_role = False
                     streamed_len = 0
-                    async for item in _stream_items_with_keepalive(client, qwen_model, current_prompt, has_custom_tools=bool(tools), xml_mode=force_xml_mode, exclude_accounts=excluded_accounts, thinking=req_thinking):
+                    async for item in _stream_items_with_keepalive(client, qwen_model, current_prompt, has_custom_tools=bool(tools), xml_mode=force_xml_mode, exclude_accounts=excluded_accounts, thinking=req_thinking, files=qwen_files):
                         if item["type"] == "keepalive":
                             yield ": keepalive\n\n"
                             continue
@@ -365,7 +381,7 @@ async def chat_completions(request: Request):
                 native_tc_chunks: dict = {}
                 sent_role = False
 
-                async for item in _stream_items_with_keepalive(client, qwen_model, current_prompt, has_custom_tools=bool(tools), xml_mode=force_xml_mode, exclude_accounts=excluded_accounts, thinking=req_thinking):
+                async for item in _stream_items_with_keepalive(client, qwen_model, current_prompt, has_custom_tools=bool(tools), xml_mode=force_xml_mode, exclude_accounts=excluded_accounts, thinking=req_thinking, files=qwen_files):
                     if item["type"] == "keepalive":
                         yield ": keepalive\n\n"
                         continue
@@ -558,7 +574,7 @@ async def chat_completions(request: Request):
                 acc = None
                 
                 send_native = bool(tools) and not force_xml_mode
-                async for item in client.chat_stream_events_with_retry(qwen_model, current_prompt, has_custom_tools=bool(tools), xml_mode=force_xml_mode, exclude_accounts=excluded_accounts, thinking=req_thinking):
+                async for item in client.chat_stream_events_with_retry(qwen_model, current_prompt, has_custom_tools=bool(tools), xml_mode=force_xml_mode, exclude_accounts=excluded_accounts, thinking=req_thinking, files=qwen_files):
                     if item["type"] == "meta":
                         chat_id = item["chat_id"]
                         acc = item["acc"]

@@ -223,3 +223,114 @@ def build_file_reference(file_info: dict) -> dict:
         "file_path": file_info["file_path"],
         "status": "uploaded",
     }
+
+
+async def upload_image_from_url_or_base64(
+    token: str,
+    image_data: str,
+    index: int = 0,
+) -> dict | None:
+    """
+    从 URL 或 base64 data URI 上传图片到 Qwen OSS。
+    
+    Args:
+        token: Qwen 账号 token
+        image_data: 图片 URL 或 base64 data URI (data:image/png;base64,...)
+        index: 图片序号（用于生成文件名）
+    
+    Returns:
+        Qwen files 格式的引用对象，或 None（失败时）
+    """
+    import httpx
+    import base64 as b64
+    
+    try:
+        if image_data.startswith("data:"):
+            # base64 data URI: data:image/png;base64,iVBOR...
+            header, encoded = image_data.split(",", 1)
+            mime_type = header.split(":")[1].split(";")[0] if ":" in header else "image/png"
+            file_content = b64.b64decode(encoded)
+            ext = mime_type.split("/")[-1].replace("jpeg", "jpg")
+            filename = f"image_{index}_{int(time.time())}.{ext}"
+        elif image_data.startswith("http"):
+            # URL: 下载图片
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.get(image_data)
+                if resp.status_code != 200:
+                    log.warning(f"[FileUpload] 下载图片失败: {image_data[:100]} -> HTTP {resp.status_code}")
+                    return None
+                file_content = resp.content
+                mime_type = resp.headers.get("content-type", "image/png").split(";")[0]
+                ext = mime_type.split("/")[-1].replace("jpeg", "jpg")
+                filename = f"image_{index}_{int(time.time())}.{ext}"
+        else:
+            log.warning(f"[FileUpload] 不支持的图片格式: {image_data[:50]}")
+            return None
+        
+        # 上传到 Qwen OSS
+        result = await upload_file_to_qwen(
+            token=token,
+            filename=filename,
+            file_content=file_content,
+            mime_type=mime_type,
+        )
+        
+        # 返回 Qwen payload 中 files 字段需要的格式
+        return {
+            "id": result["file_id"],
+            "name": result["filename"],
+            "size": result["size"],
+            "type": "image",
+            "file_path": result["file_path"],
+            "status": "uploaded",
+        }
+    except Exception as e:
+        log.error(f"[FileUpload] 图片上传失败: {e}")
+        return None
+
+
+async def extract_and_upload_images(
+    messages: list[dict],
+    token: str,
+) -> list[dict]:
+    """
+    从 OpenAI 格式的消息中提取图片，上传到 Qwen OSS，返回 files 列表。
+    
+    处理的格式：
+    - {"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}}
+    - {"type": "image_url", "image_url": {"url": "https://..."}}
+    """
+    files = []
+    img_index = 0
+    
+    for msg in messages:
+        content = msg.get("content", "")
+        if not isinstance(content, list):
+            continue
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+            if part.get("type") == "image_url":
+                url_obj = part.get("image_url", {})
+                url = url_obj.get("url", "") if isinstance(url_obj, dict) else str(url_obj)
+                if url:
+                    result = await upload_image_from_url_or_base64(token, url, img_index)
+                    if result:
+                        files.append(result)
+                        img_index += 1
+            elif part.get("type") == "image":
+                source = part.get("source", {})
+                if source.get("type") == "base64":
+                    media_type = source.get("media_type", "image/png")
+                    data_uri = f"data:{media_type};base64,{source.get('data', '')}"
+                    result = await upload_image_from_url_or_base64(token, data_uri, img_index)
+                    if result:
+                        files.append(result)
+                        img_index += 1
+                elif source.get("type") == "url":
+                    result = await upload_image_from_url_or_base64(token, source.get("url", ""), img_index)
+                    if result:
+                        files.append(result)
+                        img_index += 1
+    
+    return files
