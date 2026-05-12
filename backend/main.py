@@ -26,6 +26,7 @@ from backend.core.account_pool import AccountPool
 from backend.core.health_snapshot import HealthSnapshotManager
 from backend.services.qwen_client import QwenClient
 from backend.api import admin, chat, probes, anthropic, gemini, embeddings, images, responses
+from backend.api import files as files_api
 from backend.services.garbage_collector import garbage_collect_chats
 from backend.services.log_manager import setup_log_capturing
 
@@ -144,6 +145,7 @@ app.include_router(anthropic.router, tags=["Claude Compatible"])
 app.include_router(gemini.router, tags=["Gemini Compatible"])
 app.include_router(embeddings.router, tags=["Embeddings"])
 app.include_router(probes.router, tags=["Probes"])
+app.include_router(files_api.router, tags=["Files"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Dashboard Admin"])
 
 @app.get("/api", tags=["System"])

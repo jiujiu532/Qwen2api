@@ -6,3 +6,5 @@ camoufox[geoip]
 tiktoken
 curl_cffi
 psutil
+
+oss2>=2.18.0

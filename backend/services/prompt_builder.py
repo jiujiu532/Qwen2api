@@ -282,7 +282,7 @@ def _build_tool_choice_instruction(tool_choice: Any) -> str:
 # ============================================================================
 
 def _content_to_str(content: Any) -> str:
-    """将各种 content 格式（str / list）统一转为文本。"""
+    """将各种 content 格式（str / list）统一转为文本。支持多模态消息。"""
     if content is None:
         return ""
     if isinstance(content, str):
@@ -296,6 +296,23 @@ def _content_to_str(content: Any) -> str:
                 t = part.get("type", "")
                 if t == "text":
                     parts.append(part.get("text", ""))
+                elif t == "image_url":
+                    # OpenAI 多模态格式：{"type": "image_url", "image_url": {"url": "..."}}
+                    url_obj = part.get("image_url", {})
+                    url = url_obj.get("url", "") if isinstance(url_obj, dict) else str(url_obj)
+                    if url:
+                        parts.append(f"[Image: {url}]")
+                elif t == "image":
+                    # Anthropic 格式
+                    source = part.get("source", {})
+                    if source.get("type") == "url":
+                        parts.append(f"[Image: {source.get('url', '')}]")
+                    elif source.get("type") == "base64":
+                        parts.append("[Image: base64 data attached]")
+                elif t == "file":
+                    # 文件引用
+                    file_id = part.get("file_id", part.get("id", ""))
+                    parts.append(f"[File: {file_id}]")
                 elif t == "tool_result":
                     inner = part.get("content", "")
                     if isinstance(inner, str):
@@ -306,6 +323,26 @@ def _content_to_str(content: Any) -> str:
                                 parts.append(p.get("text", ""))
         return "\n".join(p for p in parts if p)
     return str(content)
+
+
+def extract_image_urls(messages: list[dict]) -> list[str]:
+    """从消息中提取所有图片 URL（用于多模态请求）。"""
+    urls = []
+    for msg in messages:
+        content = msg.get("content", "")
+        if isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict):
+                    if part.get("type") == "image_url":
+                        url_obj = part.get("image_url", {})
+                        url = url_obj.get("url", "") if isinstance(url_obj, dict) else str(url_obj)
+                        if url and not url.startswith("data:"):
+                            urls.append(url)
+                    elif part.get("type") == "image":
+                        source = part.get("source", {})
+                        if source.get("type") == "url":
+                            urls.append(source.get("url", ""))
+    return urls
 
 
 def messages_to_prompt(req_data: dict) -> tuple[str, list[dict]]:
