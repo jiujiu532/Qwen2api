@@ -445,11 +445,15 @@ async def delete_key(key: str, _=Depends(_require_admin)):
 
 @router.get("/settings")
 async def get_settings(_=Depends(_require_admin)):
+    from backend.core.config import DEFAULT_MODEL_ALIASES
+    # 合并默认别名 + 用户自定义（用户自定义覆盖默认）
+    merged_aliases = dict(DEFAULT_MODEL_ALIASES)
+    merged_aliases.update(MODEL_MAP)
     return {
         "admin_key": settings.ADMIN_KEY,
         "max_inflight_per_account": settings.MAX_INFLIGHT_PER_ACCOUNT,
         "engine_mode": settings.ENGINE_MODE,
-        "model_aliases": MODEL_MAP,
+        "model_aliases": merged_aliases,
         "moemail_domain": settings.MOEMAIL_DOMAIN,
         "moemail_key": settings.MOEMAIL_KEY,
         "tempmail_domain": settings.TEMPMAIL_DOMAIN,
