@@ -7,6 +7,6 @@
   },
   "then": {
     "type": "askAgent",
-    "prompt": "如果本次对话中有文件被修改，请执行 git add . 然后 git commit -m 描述本次修改的简短信息。如果没有文件修改则跳过。不要 push。"
+    "prompt": "检查是否有未提交的文件修改（用 git status --porcelain）。如果有修改，执行 git add . 然后 git commit -m 描述修改的简短信息，并把 commit hash 显示出来。如果没有未提交的修改，检查最近一次 commit 是否是本轮对话中做的（用 git log -1 --oneline），如果是则显示该 commit hash 和信息，说明本轮已提交。如果本轮确实没有任何文件修改则说明跳过。"
   }
 }
