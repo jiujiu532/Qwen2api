@@ -22,6 +22,23 @@ legacy/
 tokens/
 *.token.json
 
+# Submodules and external projects (not part of this repo)
+ds2api/
+QwenAdmin/
+QwenGateway/
+qwen2api/
+
+# Old/deprecated files
+tools/
+captcha_debug_imgs/
+mail_service.py
+main.py
+run.bat
+nginx.conf
+pyproject.toml
+uv.lock
+test_upload.txt
+
 # Tests and scripts
 test_*.py
 add_account.py
