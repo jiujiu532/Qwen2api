@@ -18,6 +18,10 @@ logs/
 legacy/
 *legacy*.py
 
+# Sensitive credentials (NEVER commit)
+tokens/
+*.token.json
+
 # Tests and scripts
 test_*.py
 add_account.py

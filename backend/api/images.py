@@ -89,14 +89,12 @@ async def create_image(request: Request):
     }
     ```
     """
-    from backend.core.config import API_KEYS, settings
+    from backend.core.config import settings
     client: QwenClient = request.app.state.qwen_client
 
-    # 鉴权
-    token = _get_token(request)
-    if API_KEYS:
-        if token != settings.ADMIN_KEY and token not in API_KEYS:
-            raise HTTPException(status_code=401, detail="Invalid API Key")
+    # 鉴权（统一模块）
+    from backend.core.auth import verify_api_key
+    verify_api_key(request)
 
     try:
         body = await request.json()

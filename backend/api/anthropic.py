@@ -80,6 +80,9 @@ def _convert_messages_to_oai(messages: list) -> list:
                     })
 
             if tool_results:
+                # 保留同消息中的文本上下文（修复丢上下文问题）
+                if text_parts:
+                    oai_msgs.append({"role": role, "content": "\n".join(text_parts)})
                 oai_msgs.extend(tool_results)
             elif tool_calls:
                 oai_msgs.append({
@@ -99,10 +102,9 @@ async def anthropic_messages(request: Request):
     app = request.app
     client: QwenClient = app.state.qwen_client
 
-    # 鉴权
-    auth = request.headers.get("x-api-key", "") or request.headers.get("Authorization", "")[7:]
-    if not auth:
-        raise HTTPException(status_code=401, detail={"type": "authentication_error", "message": "Missing API key"})
+    # 鉴权（统一模块）
+    from backend.core.auth import verify_api_key
+    verify_api_key(request)
 
     try:
         req = await request.json()
@@ -130,7 +132,8 @@ async def anthropic_messages(request: Request):
 
     completion_id = f"msg_{uuid.uuid4().hex[:24]}"
     created = int(time.time())
-    force_xml_mode = bool(tool_defs)
+    # Native-first 策略：优先使用原生 function_calling，触发率更高
+    force_xml_mode = False
 
     log.info(f"[Anthropic] model={qwen_model} stream={stream} tools={[t['name'] for t in tool_defs]}")
 
@@ -149,10 +152,12 @@ async def anthropic_messages(request: Request):
             for attempt in range(max_attempts):
                 try:
                     from backend.api.chat import _stream_items_with_keepalive
-                    events = []
                     chat_id = None
                     acc = None
+                    answer_text = ""
+                    native_tc_chunks: dict = {}
 
+                    # 边读边吐：文本 delta 实时透传，工具检测并行进行
                     async for item in _stream_items_with_keepalive(client, qwen_model, current_prompt, has_custom_tools=bool(tool_defs), xml_mode=fxm, exclude_accounts=excluded):
                         if item["type"] == "keepalive":
                             yield ": keepalive\n\n"
@@ -162,18 +167,17 @@ async def anthropic_messages(request: Request):
                             if isinstance(item["acc"], Account):
                                 acc = item["acc"]
                             continue
-                        if item["type"] == "event":
-                            events.append(item["event"])
-
-                    answer_text = ""
-                    native_tc_chunks: dict = {}
-                    for evt in events:
-                        if evt["type"] != "delta":
+                        if item["type"] != "event":
+                            continue
+                        evt = item["event"]
+                        if evt.get("type") != "delta":
                             continue
                         ph = evt.get("phase", "")
                         ct = evt.get("content", "")
                         if ph == "answer" and ct:
                             answer_text += ct
+                            # 实时透传文本 delta
+                            yield f"event: content_block_delta\ndata: {json.dumps({'type': 'content_block_delta', 'index': 0, 'delta': {'type': 'text_delta', 'text': ct}}, ensure_ascii=False)}\n\n"
                         elif ph == "tool_call" and ct:
                             tc_id = evt.get("extra", {}).get("tool_call_id", "tc_0")
                             if tc_id not in native_tc_chunks:
@@ -215,9 +219,7 @@ async def anthropic_messages(request: Request):
                             yield f"event: content_block_stop\ndata: {{\"type\": \"content_block_stop\", \"index\": {idx+1}}}\n\n"
                         yield f"event: message_delta\ndata: {json.dumps({'type': 'message_delta', 'delta': {'stop_reason': 'tool_use', 'stop_sequence': None}, 'usage': {'output_tokens': len(answer_text)}}, ensure_ascii=False)}\n\n"
                     else:
-                        # stream text
-                        if answer_text:
-                            yield f"event: content_block_delta\ndata: {json.dumps({'type': 'content_block_delta', 'index': 0, 'delta': {'type': 'text_delta', 'text': answer_text}}, ensure_ascii=False)}\n\n"
+                        # 文本已经实时透传完毕，只需关闭 block
                         yield f"event: content_block_stop\ndata: {{\"type\": \"content_block_stop\", \"index\": 0}}\n\n"
                         yield f"event: message_delta\ndata: {json.dumps({'type': 'message_delta', 'delta': {'stop_reason': 'end_turn', 'stop_sequence': None}, 'usage': {'output_tokens': len(answer_text)}}, ensure_ascii=False)}\n\n"
 

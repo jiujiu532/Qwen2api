@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Auto Git Commit",
+  "description": "每次 agent 执行完毕后，自动将所有修改提交到本地 git，方便回退",
+  "version": "1",
+  "when": {
+    "type": "agentStop"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "如果本次对话中有文件被修改，请执行 git add . 然后 git commit -m 描述本次修改的简短信息。如果没有文件修改则跳过。不要 push。"
+  }
+}

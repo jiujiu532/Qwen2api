@@ -168,21 +168,9 @@ async def chat_completions(request: Request):
     users_db = app.state.users_db
     client: QwenClient = app.state.qwen_client
 
-    # 鉴权
-    auth_header = request.headers.get("Authorization", "")
-    token = auth_header[7:].strip() if auth_header.startswith("Bearer ") else ""
-
-    if not token:
-        token = request.headers.get("x-api-key", "").strip()
-    if not token:
-        token = request.query_params.get("key", "").strip() or request.query_params.get("api_key", "").strip()
-
-    from backend.core.config import API_KEYS
-    admin_k = settings.ADMIN_KEY
-
-    if API_KEYS:
-        if token != admin_k and token not in API_KEYS and not token:
-            raise HTTPException(status_code=401, detail="Invalid API Key")
+    # 鉴权（统一模块）
+    from backend.core.auth import verify_api_key
+    token = verify_api_key(request)
 
     # 获取下游用户并处理配额
     users = await users_db.get()
@@ -272,9 +260,9 @@ async def chat_completions(request: Request):
         async def generate():
             current_prompt = prompt
             excluded_accounts = set()
-            # XML-first 策略：MCP / 外部工具始终用 XML 格式调用，跳过 native function_calling
-            # （native 路径导致 Qwen 平台拦截后需要额外 60s 重试，很容易断流）
-            force_xml_mode = bool(tools)  # 有工具一开始就用 XML
+            # Native-first 策略：优先使用 Qwen 原生 function_calling，触发率更高
+            # 仅在被平台拦截后才 fallback 到 XML 模式
+            force_xml_mode = False
             max_attempts = settings.TOOL_MAX_RETRIES if tools else settings.MAX_RETRIES
             for stream_attempt in range(max_attempts):
               try:
@@ -358,8 +346,13 @@ async def chat_completions(request: Request):
                             aio.create_task(client.delete_chat(acc.token, chat_id))
                     return
 
-                # ── 有工具：缓冲完整响应后解析工具调用（原逻辑）──────────────
+                # ── 有工具：边读边吐 + 并行收集工具调用 ──────────────
                 send_native = bool(tools) and not force_xml_mode
+                answer_text = ""
+                reasoning_text = ""
+                native_tc_chunks: dict = {}
+                sent_role = False
+
                 async for item in _stream_items_with_keepalive(client, qwen_model, current_prompt, has_custom_tools=bool(tools), xml_mode=force_xml_mode, exclude_accounts=excluded_accounts):
                     if item["type"] == "keepalive":
                         yield ": keepalive\n\n"
@@ -371,17 +364,14 @@ async def chat_completions(request: Request):
                             acc = meta_acc
                         yield ": upstream-connected\n\n"
                         continue
-                    if item["type"] == "event":
-                        events.append(item["event"])
-
-                answer_text = ""
-                reasoning_text = ""
-                native_tc_chunks: dict = {}
-                for evt in events:
-                    if evt["type"] != "delta":
+                    if item["type"] != "event":
+                        continue
+                    evt = item["event"]
+                    if evt.get("type") != "delta":
                         continue
                     phase = evt.get("phase", "")
                     content = evt.get("content", "")
+
                     if phase in ("think", "thinking_summary") and content:
                         reasoning_text += content
                     elif phase == "answer" and content:
@@ -545,7 +535,7 @@ async def chat_completions(request: Request):
     else:
         current_prompt = prompt
         excluded_accounts = set()
-        force_xml_mode = bool(tools)  # XML-first 策略
+        force_xml_mode = False  # Native-first 策略
         max_attempts = settings.TOOL_MAX_RETRIES if tools else settings.MAX_RETRIES
         acc: Optional[Account] = None
         chat_id: Optional[str] = None

@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     # 服务配置
     PORT: int = int(os.getenv("PORT", 7860))
     WORKERS: int = int(os.getenv("WORKERS", 3))
-    ADMIN_KEY: str = os.getenv("ADMIN_KEY", "123456")
+    ADMIN_KEY: str = os.getenv("ADMIN_KEY", "")  # 必须显式配置，不再提供弱默认值
     REGISTER_SECRET: str = os.getenv("REGISTER_SECRET", "")
     
     # MoeMail 自建配置
@@ -35,9 +35,9 @@ class Settings(BaseSettings):
     MAX_RETRIES: int = 2
     TOOL_MAX_RETRIES: int = 3
     EMPTY_RESPONSE_RETRIES: int = 1
-    ACCOUNT_MIN_INTERVAL_MS: int = int(os.getenv("ACCOUNT_MIN_INTERVAL_MS", 1200))
-    REQUEST_JITTER_MIN_MS: int = int(os.getenv("REQUEST_JITTER_MIN_MS", 120))
-    REQUEST_JITTER_MAX_MS: int = int(os.getenv("REQUEST_JITTER_MAX_MS", 360))
+    ACCOUNT_MIN_INTERVAL_MS: int = int(os.getenv("ACCOUNT_MIN_INTERVAL_MS", 300))
+    REQUEST_JITTER_MIN_MS: int = int(os.getenv("REQUEST_JITTER_MIN_MS", 30))
+    REQUEST_JITTER_MAX_MS: int = int(os.getenv("REQUEST_JITTER_MAX_MS", 100))
     RATE_LIMIT_BASE_COOLDOWN: int = int(os.getenv("RATE_LIMIT_BASE_COOLDOWN", 600))
     RATE_LIMIT_MAX_COOLDOWN: int = int(os.getenv("RATE_LIMIT_MAX_COOLDOWN", 3600))
     RATE_LIMIT_COOLDOWN: int = RATE_LIMIT_BASE_COOLDOWN
@@ -166,3 +166,15 @@ IMAGE_MODEL_DEFAULT = "qwen3.6-plus"
 
 def resolve_model(name: str) -> str:
     return MODEL_MAP.get(name, name)
+
+
+def validate_security_config():
+    """启动时校验安全相关配置，防止弱密钥上线。"""
+    _log = logging.getLogger("qwen2api.config")
+    if not settings.ADMIN_KEY:
+        _log.warning("[Security] ADMIN_KEY 未配置，将使用随机生成的临时密钥（仅限开发环境）")
+        import secrets
+        settings.ADMIN_KEY = secrets.token_urlsafe(32)
+        _log.warning(f"[Security] 临时 ADMIN_KEY = {settings.ADMIN_KEY}")
+    elif settings.ADMIN_KEY in ("123456", "admin", "password", "test", "000000"):
+        _log.warning(f"[Security] ADMIN_KEY 过于简单（{settings.ADMIN_KEY}），强烈建议更换为强密钥")

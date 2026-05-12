@@ -172,6 +172,10 @@ async def openai_responses(request: Request):
     if not token:
         token = request.headers.get("x-api-key", "")
 
+    # 鉴权（统一模块）
+    from backend.core.auth import verify_api_key
+    verify_api_key(request)
+
     try:
         req = await request.json()
     except Exception:

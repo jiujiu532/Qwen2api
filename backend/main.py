@@ -32,6 +32,10 @@ from backend.services.log_manager import setup_log_capturing
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("qwen2api")
 
+# 启动时安全校验
+from backend.core.config import validate_security_config
+validate_security_config()
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log.info("Starting qwen2API v2.0 Enterprise Gateway...")
