@@ -185,25 +185,17 @@ def _register_single_account(provider: str = "default", moemail_domain: str = ""
         verify_url_fetcher = lambda: gm.poll_for_activation_link(max_polls=mail_poll_times)
 
     else:
-        # 默认渠道：GuerrillaMail / ChatGPT.org.uk
+        # 默认渠道：GPTMail (mail.chatgpt.org.uk) — 自动获取公共 API Key
+        from backend.services.mail_service import GPTMailClient
+        gptmail = GPTMailClient()
         try:
-            root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-            if root_dir not in sys.path:
-                sys.path.insert(0, root_dir)
-            from mail_service import MailService
-        except ImportError:
-            log.error("[Register] 无法导入 mail_service，请检查根目录下的 mail_service.py")
+            addr_info = gptmail.create_address_sync()
+        except Exception as e:
+            log.error(f"[Register] GPTMail 邮箱获取失败: {e}")
             return None
-        provider_cfg = MAIL_PROVIDERS.get(provider, MAIL_PROVIDERS["default"])
-        api_url = provider_cfg.get("api_url") or "https://mail.chatgpt.org.uk"
-        mail_svc = MailService(api_url=api_url)
-        email_result = mail_svc.request_email()
-        if not email_result.success:
-            log.error(f"[Register] 邮箱获取失败: {email_result.error}")
-            return None
-        email_addr = email_result.email or ""
-        log.info(f"[Register] 邮箱获取成功: {email_addr}")
-        verify_url_fetcher = lambda: mail_svc.poll_code(email_addr)
+        email_addr = addr_info["address"]
+        log.info(f"[Register] GPTMail 邮箱获取成功: {email_addr}")
+        verify_url_fetcher = lambda: gptmail.poll_for_activation_link(email_addr, max_polls=mail_poll_times)
 
     # 2. 无头浏览器提交注册表单
     from backend.services.browser_register import browser_signup_sync

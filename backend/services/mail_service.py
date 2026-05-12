@@ -304,3 +304,162 @@ def get_mail_client(provider: str, settings):
         return TempMailClient(domain, key)
     else:
         raise ValueError(f"未知邮箱服务渠道: {provider}")
+
+
+# ============================================================================
+# GPTMail 公共邮箱服务客户端（mail.chatgpt.org.uk）
+# 自动获取每日更新的公共 API Key
+# ============================================================================
+
+class GPTMailClient:
+    """
+    GPTMail (mail.chatgpt.org.uk) 公共临时邮箱服务客户端。
+    
+    特点：
+    - 公共 API Key 每日 08:00 (北京时间) 自动重置
+    - 每日 20 万次免费额度
+    - 自动获取最新 key，无需手动配置
+    
+    API:
+    - 生成邮箱: GET/POST /api/generate-email
+    - 查询邮件: GET /api/emails?email=xxx
+    - 读取邮件: GET /api/email/{id}
+    """
+
+    BASE_URL = "https://mail.chatgpt.org.uk"
+    _cached_key: str = ""
+    _key_fetched_at: float = 0
+
+    def __init__(self, api_key: str = ""):
+        """如果传入 api_key 则使用固定 key，否则自动获取公共 key。"""
+        self._fixed_key = api_key
+
+    @classmethod
+    def _fetch_public_key(cls) -> str:
+        """从 GPTMail 获取当日公共 API Key。每天北京时间 08:00 自动刷新。"""
+        import time as _time
+        from datetime import datetime, timezone, timedelta
+
+        # 检查是否需要刷新：如果已过北京时间 08:00 且 key 是昨天获取的，则刷新
+        bj_tz = timezone(timedelta(hours=8))
+        now_bj = datetime.now(bj_tz)
+        today_reset = now_bj.replace(hour=8, minute=0, second=0, microsecond=0)
+        if now_bj < today_reset:
+            today_reset = today_reset - timedelta(days=1)
+
+        # 如果有缓存且是今天 08:00 之后获取的，直接用
+        if cls._cached_key and cls._key_fetched_at > today_reset.timestamp():
+            return cls._cached_key
+
+        try:
+            with httpx.Client(timeout=10) as client:
+                resp = client.get(
+                    f"{cls.BASE_URL}/api/public-key-status",
+                    params={"reveal": "1"},
+                    headers={"X-Public-Key-Reveal": "click"},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                if data.get("success") and data.get("data", {}).get("key"):
+                    cls._cached_key = data["data"]["key"]
+                    cls._key_fetched_at = _time.time()
+                    remaining = data["data"].get("remaining_today", "?")
+                    log.info(f"[GPTMail] 公共 Key 获取成功: {cls._cached_key}，今日剩余额度: {remaining}")
+                    return cls._cached_key
+        except Exception as e:
+            log.warning(f"[GPTMail] 获取公共 Key 失败: {e}")
+        return cls._cached_key or ""
+
+    @property
+    def api_key(self) -> str:
+        """获取当前可用的 API Key。"""
+        if self._fixed_key:
+            return self._fixed_key
+        return self._fetch_public_key()
+
+    def create_address_sync(self, prefix: str = "") -> dict:
+        """同步生成临时邮箱。"""
+        key = self.api_key
+        if not key:
+            raise Exception("[GPTMail] 无法获取 API Key")
+        headers = {"X-API-Key": key}
+        with httpx.Client(timeout=15) as client:
+            if prefix:
+                resp = client.post(
+                    f"{self.BASE_URL}/api/generate-email",
+                    json={"prefix": prefix},
+                    headers={**headers, "Content-Type": "application/json"},
+                )
+            else:
+                resp = client.get(f"{self.BASE_URL}/api/generate-email", headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+            if not data.get("success"):
+                error = data.get("error", "Unknown error")
+                # 如果是 key 过期/额度用完，清除缓存强制重新获取
+                if "expired" in str(error).lower() or "limit" in str(error).lower():
+                    GPTMailClient._cached_key = ""
+                    GPTMailClient._key_fetched_at = 0
+                raise Exception(f"[GPTMail] 生成邮箱失败: {error}")
+            email_addr = data["data"].get("email", "")
+            return {"address": email_addr, "provider": "gptmail"}
+
+    def poll_for_activation_link(self, email: str, max_polls: int = 24, interval: int = 5) -> str | None:
+        """同步轮询 GPTMail 收件箱，提取 Qwen 激活链接。"""
+        import time as _time
+        key = self.api_key
+        if not key:
+            log.error("[GPTMail] 无法获取 API Key，无法查询邮件")
+            return None
+        headers = {"X-API-Key": key}
+        log.debug(f"[GPTMail] 开始轮询 (email={email}, 最多 {max_polls} 次, 间隔 {interval}s)")
+        with httpx.Client(timeout=15) as client:
+            for poll in range(max_polls):
+                try:
+                    resp = client.get(
+                        f"{self.BASE_URL}/api/emails",
+                        params={"email": email},
+                        headers=headers,
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        msgs = data.get("data", []) if data.get("success") else []
+                        for msg in msgs:
+                            # 获取邮件详情
+                            mail_id = msg.get("id", "")
+                            if not mail_id:
+                                continue
+                            detail_resp = client.get(
+                                f"{self.BASE_URL}/api/email/{mail_id}",
+                                headers=headers,
+                            )
+                            if detail_resp.status_code != 200:
+                                continue
+                            detail = detail_resp.json()
+                            if not detail.get("success"):
+                                continue
+                            mail_data = detail.get("data", {})
+                            # 在 HTML 或文本中查找激活链接
+                            body = mail_data.get("html", "") or mail_data.get("text", "") or ""
+                            m = re.search(
+                                r"href=[\"']([^\"']*https://chat\.qwen\.ai/api/v1/auths/activate[^\"']*)[\"']",
+                                body, re.IGNORECASE
+                            )
+                            if m:
+                                link = m.group(1).strip()
+                                log.info(f"[GPTMail] 激活链接匹配成功: {link}")
+                                return link
+                            # 也尝试纯文本匹配
+                            m2 = re.search(
+                                r"(https://chat\.qwen\.ai/api/v1/auths/activate[^\s<\"']+)",
+                                body, re.IGNORECASE
+                            )
+                            if m2:
+                                link = m2.group(1).strip()
+                                log.info(f"[GPTMail] 激活链接匹配成功(文本): {link}")
+                                return link
+                except Exception as e:
+                    log.warning(f"[GPTMail] 轮询异常 [{poll + 1}/{max_polls}]: {e}")
+                _time.sleep(interval)
+        log.warning(f"[GPTMail] 邮件查询已达 {max_polls} 次，放弃 (email={email})")
+        return None
