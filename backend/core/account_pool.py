@@ -266,6 +266,7 @@ class AccountPool:
         """启动后台守护任务（在 app startup 时调用）。"""
         self._bg_tasks.append(asyncio.create_task(self._circuit_recovery_loop()))
         self._bg_tasks.append(asyncio.create_task(self._sticky_cleanup_loop()))
+        self._bg_tasks.append(asyncio.create_task(self._token_expiry_cleanup_loop()))
         log.info("[AccountPool] 后台任务已启动")
 
     # ── 调度核心 ─────────────────────────────
@@ -396,6 +397,24 @@ class AccountPool:
                 sorted_keys = sorted(self._sticky_map, key=lambda k: self._sticky_map[k][2])
                 for k in sorted_keys[:len(self._sticky_map) - 10000]:
                     del self._sticky_map[k]
+
+    async def _token_expiry_cleanup_loop(self):
+        """定期清理 JWT 过期的账号，静默删除不通知用户。"""
+        while True:
+            await asyncio.sleep(600)  # 每 10 分钟检查一次
+            now = time.time()
+            expired_emails = []
+            async with self._lock:
+                for acc in self._accounts:
+                    if self._is_token_expired(acc.token, now):
+                        expired_emails.append(acc.email)
+            if expired_emails:
+                for email in expired_emails:
+                    async with self._lock:
+                        self._accounts = [a for a in self._accounts if a.email != email]
+                    self._rebuild_heap()
+                await self.save()
+                log.info(f"[AccountPool] 已自动清理 {len(expired_emails)} 个过期账号: {expired_emails[:5]}{'...' if len(expired_emails) > 5 else ''}")
 
     # ── 统一错误处理 ─────────────────────────
     def mark_error(self, acc: Account, error_type: str, msg: str = ""):
