@@ -28,6 +28,9 @@ QwenAdmin/
 QwenGateway/
 qwen2api/
 
+# Internal docs (not for public repo)
+docs/
+
 # Old/deprecated files
 tools/
 captcha_debug_imgs/
