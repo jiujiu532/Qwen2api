@@ -1,8 +1,7 @@
 {
-  "enabled": true,
   "name": "Auto Git Commit",
+  "version": "1.0.0",
   "description": "每次 agent 执行完毕后，自动将所有修改提交到本地 git，方便回退",
-  "version": "1",
   "when": {
     "type": "agentStop"
   },
