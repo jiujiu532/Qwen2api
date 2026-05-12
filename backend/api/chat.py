@@ -12,7 +12,7 @@ from backend.services.qwen_client import QwenClient
 from backend.services.token_calc import calculate_usage
 from backend.services.prompt_builder import messages_to_prompt
 from backend.services.tool_parser import parse_tool_calls, inject_format_reminder, build_tool_blocks_from_native_chunks, should_block_tool_call
-from backend.core.config import resolve_model, settings, IMAGE_MODEL_DEFAULT
+from backend.core.config import resolve_model, resolve_model_thinking, settings, IMAGE_MODEL_DEFAULT
 
 log = logging.getLogger("qwen2api.chat")
 router = APIRouter()
@@ -29,12 +29,12 @@ def _t2i_user_error(err_str: str) -> str:
         return "图片生成失败: 账号认证异常，系统正在自动修复"
     return f"图片生成失败: {err_str[:200]}"
 
-async def _stream_items_with_keepalive(client, model: str, prompt: str, has_custom_tools: bool, xml_mode: bool = False, exclude_accounts=None):
+async def _stream_items_with_keepalive(client, model: str, prompt: str, has_custom_tools: bool, xml_mode: bool = False, exclude_accounts=None, thinking: bool = None):
     queue: aio.Queue = aio.Queue()
 
     async def _producer():
         try:
-            async for item in client.chat_stream_events_with_retry(model, prompt, has_custom_tools=has_custom_tools, xml_mode=xml_mode, exclude_accounts=exclude_accounts):
+            async for item in client.chat_stream_events_with_retry(model, prompt, has_custom_tools=has_custom_tools, xml_mode=xml_mode, exclude_accounts=exclude_accounts, thinking=thinking):
                 await queue.put(("item", item))
         except Exception as e:
             await queue.put(("error", e))
@@ -187,8 +187,20 @@ async def chat_completions(request: Request):
     qwen_model = resolve_model(model_name)
     stream = req_data.get("stream", False)
     
+    # 思考模式：优先看模型名后缀（-nothinking），其次看请求参数
+    req_thinking = resolve_model_thinking(model_name)
+    # 请求中可通过 thinking 或 reasoning_effort 参数覆盖
+    if "thinking" in req_data:
+        req_thinking = bool(req_data["thinking"])
+    elif "reasoning_effort" in req_data:
+        effort = req_data["reasoning_effort"]
+        if effort in ("high", "max"):
+            req_thinking = True
+        elif effort in ("low", "none", "off"):
+            req_thinking = False
+
     prompt, tools = messages_to_prompt(req_data)
-    log.info(f"[OAI] model={qwen_model}, stream={stream}, tools={[t.get('name') for t in tools]}, prompt_len={len(prompt)}")
+    log.info(f"[OAI] model={qwen_model}, stream={stream}, tools={[t.get('name') for t in tools]}, thinking={req_thinking}, prompt_len={len(prompt)}")
     history_messages = req_data.get("messages", [])
 
     completion_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
@@ -274,7 +286,7 @@ async def chat_completions(request: Request):
                 if not tools:
                     sent_role = False
                     streamed_len = 0
-                    async for item in _stream_items_with_keepalive(client, qwen_model, current_prompt, has_custom_tools=bool(tools), xml_mode=force_xml_mode, exclude_accounts=excluded_accounts):
+                    async for item in _stream_items_with_keepalive(client, qwen_model, current_prompt, has_custom_tools=bool(tools), xml_mode=force_xml_mode, exclude_accounts=excluded_accounts, thinking=req_thinking):
                         if item["type"] == "keepalive":
                             yield ": keepalive\n\n"
                             continue
@@ -353,7 +365,7 @@ async def chat_completions(request: Request):
                 native_tc_chunks: dict = {}
                 sent_role = False
 
-                async for item in _stream_items_with_keepalive(client, qwen_model, current_prompt, has_custom_tools=bool(tools), xml_mode=force_xml_mode, exclude_accounts=excluded_accounts):
+                async for item in _stream_items_with_keepalive(client, qwen_model, current_prompt, has_custom_tools=bool(tools), xml_mode=force_xml_mode, exclude_accounts=excluded_accounts, thinking=req_thinking):
                     if item["type"] == "keepalive":
                         yield ": keepalive\n\n"
                         continue
@@ -546,7 +558,7 @@ async def chat_completions(request: Request):
                 acc = None
                 
                 send_native = bool(tools) and not force_xml_mode
-                async for item in client.chat_stream_events_with_retry(qwen_model, current_prompt, has_custom_tools=bool(tools), xml_mode=force_xml_mode, exclude_accounts=excluded_accounts):
+                async for item in client.chat_stream_events_with_retry(qwen_model, current_prompt, has_custom_tools=bool(tools), xml_mode=force_xml_mode, exclude_accounts=excluded_accounts, thinking=req_thinking):
                     if item["type"] == "meta":
                         chat_id = item["chat_id"]
                         acc = item["acc"]

@@ -209,20 +209,25 @@ class QwenClient:
 
     def _build_payload(self, chat_id: str, model: str, content: str,
                         has_custom_tools: bool = False,
-                        enable_native_fc: Optional[bool] = None) -> dict:
+                        enable_native_fc: Optional[bool] = None,
+                        thinking: Optional[bool] = None) -> dict:
         ts = int(time.time())
         # has_custom_tools=True: 关闭思考/搜索/插件（适用于任何工具调用模式）
         # enable_native_fc: 独立控制是否开启 Qwen 平台原生 function_calling
-        #   None → 默认沿用旧逻辑（has_custom_tools and NATIVE_TOOL_PASSTHROUGH）
-        #   False → 强制关闭（XML模式）
+        # thinking: 显式控制思考模式（None=自动，True=强制开，False=强制关）
         if enable_native_fc is None:
             enable_native_fc = bool(has_custom_tools and settings.NATIVE_TOOL_PASSTHROUGH)
+        # 思考模式决策：有工具时关闭，否则看 thinking 参数
+        if thinking is None:
+            think_on = not has_custom_tools
+        else:
+            think_on = thinking and not has_custom_tools
         feature_config = {
-            "thinking_enabled": not has_custom_tools,
+            "thinking_enabled": think_on,
             "output_schema": "phase",
             "research_mode": "normal",
-            "auto_thinking": not has_custom_tools,
-            "thinking_mode": "off" if has_custom_tools else "Auto",
+            "auto_thinking": think_on,
+            "thinking_mode": "off" if not think_on else "Auto",
             "thinking_format": "summary",
             "auto_search": not has_custom_tools,
             "code_interpreter": not has_custom_tools,
@@ -358,7 +363,8 @@ class QwenClient:
     async def chat_stream_events_with_retry(self, model: str, content: str,
                                               has_custom_tools: bool = False,
                                               xml_mode: bool = False,
-                                              exclude_accounts: Optional[set[str]] = None):
+                                              exclude_accounts: Optional[set[str]] = None,
+                                              thinking: Optional[bool] = None):
         """无感容灾重试逻辑：上游挂了自动换号"""
         exclude = set(exclude_accounts or set())
         # xml_mode: 有工具但不用 Qwen 原生 FC，用 XML prompt 注入
@@ -391,7 +397,7 @@ class QwenClient:
                     await asyncio.sleep(wait_s)
                 chat_id = await self.create_chat(acc.token, model)
                 self.active_chat_ids.add(chat_id)
-                payload = self._build_payload(chat_id, model, content, effective_has_tools, enable_native_fc)
+                payload = self._build_payload(chat_id, model, content, effective_has_tools, enable_native_fc, thinking)
                 log.info(
                     f"[重试 {attempt+1}/{settings.MAX_RETRIES}] 已创建会话：account={acc.email} chat_id={chat_id} "
                     f"engine={self.engine.__class__.__name__} function_calling={payload['messages'][0]['feature_config'].get('function_calling')} "

@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     MAX_RETRIES: int = 3
     TOOL_MAX_RETRIES: int = 4
     EMPTY_RESPONSE_RETRIES: int = 1
+    # 思考模式：True=默认开启（慢但质量高），False=默认关闭（快但可能质量略低）
+    DEFAULT_THINKING_ENABLED: bool = os.getenv("DEFAULT_THINKING_ENABLED", "false").lower() in ("1", "true", "yes", "on")
     ACCOUNT_MIN_INTERVAL_MS: int = int(os.getenv("ACCOUNT_MIN_INTERVAL_MS", 300))
     REQUEST_JITTER_MIN_MS: int = int(os.getenv("REQUEST_JITTER_MIN_MS", 30))
     REQUEST_JITTER_MAX_MS: int = int(os.getenv("REQUEST_JITTER_MAX_MS", 100))
@@ -158,12 +160,18 @@ def _load_runtime_settings():
 # ── Qwen 官网内置可用模型 ──────────────────────────────────────────────────────
 BUILTIN_MODELS = [
     "qwen3.6-plus",
+    "qwen3.6-plus-nothinking",
     "qwen3.6-max-preview",
+    "qwen3.6-max-preview-nothinking",
     "qwen3.6-27b",
+    "qwen3.6-27b-nothinking",
 ]
 
 # 默认模型（未知模型名的 fallback）
 DEFAULT_MODEL = "qwen3.6-plus"
+
+# nothinking 后缀：用户选带 -nothinking 的模型时，关闭思考模式（快速响应）
+NOTHINKING_SUFFIX = "-nothinking"
 
 # ── 默认别名映射（常见 OpenAI/Claude/Gemini 模型名 -> Qwen 模型）──────────────
 DEFAULT_MODEL_ALIASES: dict[str, str] = {
@@ -224,14 +232,45 @@ IMAGE_MODEL_DEFAULT = "qwen3.6-plus"
 
 
 def resolve_model(name: str) -> str:
-    """解析模型名。优先级：用户自定义 > 默认别名 > 内置模型 > 默认模型。"""
+    """解析模型名，返回 Qwen 真实模型名。
+    
+    -nothinking 后缀会被剥离，真实模型名传给 Qwen。
+    思考模式由 resolve_model_thinking() 单独判断。
+    """
+    # 1. 用户自定义映射（最高优先级）
     if name in MODEL_MAP:
-        return MODEL_MAP[name]
-    if name in DEFAULT_MODEL_ALIASES:
-        return DEFAULT_MODEL_ALIASES[name]
-    if name in BUILTIN_MODELS:
-        return name
+        resolved = MODEL_MAP[name]
+        # 自定义映射的结果也可能带 -nothinking
+        if resolved.endswith(NOTHINKING_SUFFIX):
+            return resolved[:-len(NOTHINKING_SUFFIX)]
+        return resolved
+    # 2. 剥离 -nothinking 后缀再查
+    base_name = name[:-len(NOTHINKING_SUFFIX)] if name.endswith(NOTHINKING_SUFFIX) else name
+    # 3. 默认别名映射
+    if base_name in DEFAULT_MODEL_ALIASES:
+        return DEFAULT_MODEL_ALIASES[base_name]
+    # 4. 如果本身就是内置模型名（不含后缀的）
+    real_models = [m for m in BUILTIN_MODELS if not m.endswith(NOTHINKING_SUFFIX)]
+    if base_name in real_models:
+        return base_name
+    # 5. 都不认识，用默认模型
     return DEFAULT_MODEL
+
+
+def resolve_model_thinking(name: str) -> bool:
+    """根据模型名判断是否开启思考模式。
+    
+    带 -nothinking 后缀 = False（快速模式）
+    不带 = True（自动/思考模式）
+    """
+    # 用户自定义映射的结果也检查
+    if name in MODEL_MAP:
+        resolved = MODEL_MAP[name]
+        if resolved.endswith(NOTHINKING_SUFFIX):
+            return False
+    if name.endswith(NOTHINKING_SUFFIX):
+        return False
+    return True
 
 
 def get_all_available_models() -> list[str]:
