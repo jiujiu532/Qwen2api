@@ -68,7 +68,7 @@ class HttpxEngine:
             return {"status": 0, "body": str(e)}
 
     async def fetch_chat(self, token: str, chat_id: str, payload: dict, buffered: bool = False):
-        """Stream Qwen SSE via curl_cffi -- 使用 aiter_content 即时透传，不等完整行。"""
+        """Stream Qwen SSE via curl_cffi -- 逐行读取，即时透传。"""
         from curl_cffi.requests import AsyncSession
         url = self.base_url + f"/api/v2/chat/completions?chat_id={chat_id}"
         headers = {
@@ -89,13 +89,13 @@ class HttpxEngine:
                         yield {"status": resp.status_code, "body": body_text}
                         return
 
-                    # 使用 aiter_content 即时获取数据块，不等完整行
-                    # 这样首字节到达后立即透传，不会被行缓冲延迟
-                    async for chunk in resp.aiter_content():
-                        if not chunk:
+                    # 使用 aiter_lines 逐行读取（自动处理解压和行分割）
+                    async for line in resp.aiter_lines():
+                        if not line:
                             continue
-                        decoded = chunk.decode("utf-8", errors="replace")
-                        yield {"status": "streamed", "chunk": decoded}
+                        decoded = line if isinstance(line, str) else line.decode("utf-8", errors="replace")
+                        if decoded.strip():
+                            yield {"status": "streamed", "chunk": decoded + "\n"}
 
         except Exception as e:
             log.error(f"[HttpxEngine] fetch_chat error: {e}")
