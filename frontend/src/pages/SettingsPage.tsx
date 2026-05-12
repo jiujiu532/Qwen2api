@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react"
+import { useNavigate } from "react-router-dom"
 import { KeyRound, Code, Mail, Server, Cpu, TriangleAlert, Globe } from "lucide-react"
 import { toast } from "sonner"
 import { getAuthHeader } from "../lib/auth"
@@ -53,6 +54,7 @@ const API_ENDPOINTS = [
 ]
 
 export default function SettingsPage() {
+  const navigate = useNavigate()
   const [sessionKey, setSessionKey] = useState("")
   const [maxInflight, setMaxInflight] = useState(4)
   const [modelAliases, setModelAliases] = useState("")
@@ -139,7 +141,6 @@ export default function SettingsPage() {
               <button
                 onClick={() => {
                   if (!sessionKey.trim()) { toast.error("密钥不能为空"); return; }
-                  // 先用当前 localStorage 中的旧 key 调用后端更新
                   const currentKey = localStorage.getItem("qwen2api_key") || sessionKey.trim();
                   fetch(`${API_BASE}/api/admin/settings`, {
                     method: "PUT",
@@ -147,16 +148,14 @@ export default function SettingsPage() {
                     body: JSON.stringify({ admin_key: sessionKey.trim() })
                   }).then(res => {
                     if (res.ok) {
-                      localStorage.setItem("qwen2api_key", sessionKey.trim());
-                      toast.success("管理密钥已更新（立即生效，重启后保持）");
+                      toast.success("管理密钥已更新，请使用新密钥重新登录");
+                      localStorage.removeItem("qwen2api_key");
+                      setTimeout(() => navigate("/login"), 1500);
                     } else {
-                      // 如果旧 key 失败，尝试用新 key（可能已经改过了）
-                      localStorage.setItem("qwen2api_key", sessionKey.trim());
-                      toast.success("密钥已同步到本地");
+                      toast.error("密钥更新失败，请检查当前密钥是否正确");
                     }
                   }).catch(() => {
-                    localStorage.setItem("qwen2api_key", sessionKey.trim());
-                    toast.info("密钥已保存到本地（后端未连接）");
+                    toast.error("网络连接异常");
                   });
                 }}
                 className="h-12 px-5 bg-foreground text-background font-semibold rounded-xl text-sm hover:opacity-90 transition-all whitespace-nowrap">
