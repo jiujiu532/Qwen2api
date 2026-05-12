@@ -81,14 +81,19 @@ class UsageManager:
 
     async def log(self, feature: str, model: str, prompt_tokens: int, completion_tokens: int,
                   success: bool = True, duration_ms: int = 0):
-        """记录一条使用数据"""
-        record = UsageRecord(feature, model, prompt_tokens, completion_tokens, success, duration_ms)
-        async with self._lock:
-            self._records.append(record.to_dict())
-            # 环形缓冲：超出上限时截断旧记录
-            if len(self._records) > self.max_memory:
-                self._records = self._records[-self.max_memory:]
-            self._dirty = True
+        """记录一条使用数据，立即落盘防止数据丢失"""
+        try:
+            record = UsageRecord(feature, model, prompt_tokens, completion_tokens, success, duration_ms)
+            async with self._lock:
+                self._records.append(record.to_dict())
+                # 环形缓冲：超出上限时截断旧记录
+                if len(self._records) > self.max_memory:
+                    self._records = self._records[-self.max_memory:]
+                self._dirty = True
+            # 每次记录后立即落盘，防止重启丢数据
+            await self._flush()
+        except Exception as e:
+            log.error(f"[UsageManager] log 失败: {e}")
 
     async def query(self, start: Optional[float] = None, end: Optional[float] = None) -> dict[str, Any]:
         """
