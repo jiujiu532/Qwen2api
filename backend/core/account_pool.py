@@ -400,21 +400,26 @@ class AccountPool:
 
     async def _token_expiry_cleanup_loop(self):
         """定期清理 JWT 过期的账号，静默删除不通知用户。"""
+        # 启动时立即执行一次清理
+        await self._cleanup_expired_tokens()
         while True:
-            await asyncio.sleep(600)  # 每 10 分钟检查一次
-            now = time.time()
-            expired_emails = []
+            await asyncio.sleep(600)  # 之后每 10 分钟检查一次
+            await self._cleanup_expired_tokens()
+
+    async def _cleanup_expired_tokens(self):
+        """执行一次过期 token 清理。"""
+        now = time.time()
+        expired_emails = []
+        async with self._lock:
+            for acc in self._accounts:
+                if self._is_token_expired(acc.token, now):
+                    expired_emails.append(acc.email)
+        if expired_emails:
             async with self._lock:
-                for acc in self._accounts:
-                    if self._is_token_expired(acc.token, now):
-                        expired_emails.append(acc.email)
-            if expired_emails:
-                for email in expired_emails:
-                    async with self._lock:
-                        self._accounts = [a for a in self._accounts if a.email != email]
-                    self._rebuild_heap()
-                await self.save()
-                log.info(f"[AccountPool] 已自动清理 {len(expired_emails)} 个过期账号: {expired_emails[:5]}{'...' if len(expired_emails) > 5 else ''}")
+                self._accounts = [a for a in self._accounts if a.email not in set(expired_emails)]
+                self._rebuild_heap()
+            await self.save()
+            log.info(f"[AccountPool] 已自动清理 {len(expired_emails)} 个过期账号")
 
     # ── 统一错误处理 ─────────────────────────
     def mark_error(self, acc: Account, error_type: str, msg: str = ""):
