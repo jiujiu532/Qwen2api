@@ -17,6 +17,8 @@ _HEADERS = {
     "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
     "Referer": "https://chat.qwen.ai/",
     "Origin": "https://chat.qwen.ai",
+    "source": "web",
+    "version": "0.2.46",
     "sec-ch-ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
     "sec-ch-ua-mobile": "?0",
     "sec-ch-ua-platform": '"Windows"',

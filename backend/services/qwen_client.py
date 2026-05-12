@@ -397,16 +397,17 @@ class QwenClient:
             chat_id: Optional[str] = None
             try:
                 log.info(f"[重试 {attempt+1}/{settings.MAX_RETRIES}] 获取账号：account={acc.email} model={model} tools={has_custom_tools} xml_mode={xml_mode} exclude={sorted(exclude)}")
-                # 本地节流：同账号两次上游请求之间保持最小间隔，降低自动化痕迹
-                min_interval = max(0, settings.ACCOUNT_MIN_INTERVAL_MS) / 1000.0
-                now = time.time()
-                wait_s = max(0.0, (acc.last_request_started + min_interval) - now)
-                # 请求指纹 jitter：随机 50-200ms 额外延迟，防止模式检测
-                jitter_ms = random.randint(settings.REQUEST_JITTER_MIN_MS, settings.REQUEST_JITTER_MAX_MS)
-                wait_s += jitter_ms / 1000.0
-                if wait_s > 0:
-                    log.debug(f"[节流] 账号冷却等待：account={acc.email} wait={wait_s:.2f}s (含 jitter {jitter_ms}ms)")
-                    await asyncio.sleep(wait_s)
+                # 本地节流：大池子（>50 账号）时跳过 jitter，小池子时保留防检测
+                pool_size = len(self.account_pool._accounts) if hasattr(self.account_pool, '_accounts') else 100
+                if pool_size < 50:
+                    min_interval = max(0, settings.ACCOUNT_MIN_INTERVAL_MS) / 1000.0
+                    now = time.time()
+                    wait_s = max(0.0, (acc.last_request_started + min_interval) - now)
+                    jitter_ms = random.randint(settings.REQUEST_JITTER_MIN_MS, settings.REQUEST_JITTER_MAX_MS)
+                    wait_s += jitter_ms / 1000.0
+                    if wait_s > 0:
+                        log.debug(f"[节流] 账号冷却等待：account={acc.email} wait={wait_s:.2f}s (含 jitter {jitter_ms}ms)")
+                        await asyncio.sleep(wait_s)
                 chat_id = await self.create_chat(acc.token, model)
                 self.active_chat_ids.add(chat_id)
                 payload = self._build_payload(chat_id, model, content, effective_has_tools, enable_native_fc, thinking)
