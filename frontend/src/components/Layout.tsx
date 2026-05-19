@@ -11,7 +11,7 @@ export function Layout() {
   return (
     <div className="min-h-screen bg-[#FAF9F5]">
       {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-[#FAF9F5]">
+      <header className="fixed top-0 left-0 right-0 z-50 bg-[#FAF9F5] border-b border-[#e5e5e5]/60">
         <div className="max-w-[1280px] w-full h-[54px] mx-auto px-7 grid grid-cols-[1fr_auto_1fr] items-center">
           {/* Brand */}
           <div className="flex items-center gap-2">
