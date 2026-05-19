@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>qwen2api - 账户管理</title>
+  <link href="https://cdn.jsdelivr.net/npm/geist@1.0.0/dist/fonts/geist-sans/style.css" rel="stylesheet">
+  <link href="/statics/css/app.css" rel="stylesheet">
+</head>
+<body>
+  <header class="admin-header" id="admin-header"></header>
+  <main class="admin-main">
+    <div class="page-hd">
+      <div>
+        <div class="page-title">账户管理</div>
+        <div class="page-sub">管理 qwen2api 的 Qwen 账户池与运行状态</div>
+      </div>
+      <div class="page-actions">
+        <button class="btn btn-secondary" onclick="showImport()">导入</button>
+        <button class="btn btn-primary" onclick="showImport()">+ 新增</button>
+      </div>
+    </div>
+
+    <!-- Import panel (hidden) -->
+    <div id="import-panel" style="display:none;margin-bottom:20px">
+      <div class="config-card" style="padding:20px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px">新增账户</div>
+        <div style="font-size:11px;color:var(--fg-muted);margin-bottom:12px">每行一个 Token，已存在的将自动跳过</div>
+        <textarea id="import-tokens" placeholder="粘贴 Token，每行一个..." style="width:100%;height:100px;padding:10px;font-size:12px;font-family:var(--font-mono);border-radius:12px;border:1px solid var(--border);resize:vertical"></textarea>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+          <button class="btn btn-secondary" onclick="hideImport()">取消</button>
+          <button class="btn btn-primary" onclick="doImport()">导入</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-title">概览</div>
+    <div class="stat-grid" id="stats"></div>
+
+    <!-- Table section -->
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin:28px 0 14px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="section-title" style="margin:0">账户列表</span>
+        <span id="total-badge" style="min-width:20px;height:20px;padding:0 7px;border-radius:999px;background:#f1ece2;color:#6a6459;font-size:11px;font-weight:600;display:inline-flex;align-items:center;justify-content:center">0</span>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <button class="pagi-btn" onclick="prevPage()"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+        <span id="pagi-info" style="padding:0 6px">第 1 / 1 页</span>
+        <button class="pagi-btn" onclick="nextPage()"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></button>
+      </div>
+      <div class="toolbar-right">
+        <div class="filter-bar" style="margin:0" id="filters"></div>
+      </div>
+    </div>
+
+    <div class="table-card">
+      <table>
+        <thead><tr>
+          <th>TOKEN</th>
+          <th>运行状态</th>
+          <th>Email</th>
+          <th style="text-align:right">操作</th>
+        </tr></thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <script src="/statics/js/common.js"></script>
+  <script>
+    let accounts = [], filter = 'all', page = 1, pageSize = 50;
+
+    async function init() {
+      if (!await checkAuth()) return;
+      renderHeader('accounts');
+      await fetchAccounts();
+    }
+
+    async function fetchAccounts() {
+      const r = await fetch('/api/admin/accounts', { headers: authHeaders() });
+      const d = await r.json();
+      accounts = d.accounts || [];
+      render();
+    }
+
+    function render() {
+      const stats = {
+        total: accounts.length,
+        active: accounts.filter(a => a.status === 'VALID').length,
+        cooling: accounts.filter(a => a.status === 'RATE_LIMITED').length,
+        invalid: accounts.filter(a => ['AUTH_ERROR','BANNED'].includes(a.status)).length,
+        disabled: accounts.filter(a => a.status === 'DISABLED').length,
+      };
+
+      document.getElementById('stats').innerHTML = `
+        <div class="stat-cell"><div class="stat-top"><span class="stat-label">账户总数</span><span class="stat-icon"><svg viewBox="0 0 24 24"><path d="M4 19a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4"/><circle cx="12" cy="8" r="4"/></svg></span></div><div class="stat-num">${stats.total}</div></div>
+        <div class="stat-cell"><div class="stat-top"><span class="stat-label">正常账户</span><span class="stat-icon" style="color:var(--success)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="m8.5 12 2.4 2.4 4.8-4.8"/></svg></span></div><div class="stat-num" style="color:var(--success)">${stats.active}</div></div>
+        <div class="stat-cell"><div class="stat-top"><span class="stat-label">限流账户</span><span class="stat-icon" style="color:var(--warning)"><svg viewBox="0 0 24 24"><path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="8"/></svg></span></div><div class="stat-num" style="color:var(--warning)">${stats.cooling}</div></div>
+        <div class="stat-cell"><div class="stat-top"><span class="stat-label">异常账户</span><span class="stat-icon" style="color:var(--error)"><svg viewBox="0 0 24 24"><path d="m15 9-6 6m0-6 6 6"/><circle cx="12" cy="12" r="8"/></svg></span></div><div class="stat-num" style="color:var(--error)">${stats.invalid}</div></div>
+        <div class="stat-cell"><div class="stat-top"><span class="stat-label">禁用账户</span><span class="stat-icon" style="color:#6f675d"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M8.5 8.5 15.5 15.5"/></svg></span></div><div class="stat-num" style="color:#6f675d">${stats.disabled}</div></div>
+      `;
+
+      // Filters
+      const filters = [
+        { key:'all', label:'全部', count:stats.total },
+        { key:'active', label:'正常', count:stats.active },
+        { key:'cooling', label:'限流', count:stats.cooling },
+        { key:'invalid', label:'异常', count:stats.invalid },
+        { key:'disabled', label:'禁用', count:stats.disabled },
+      ];
+      document.getElementById('filters').innerHTML = filters.map(f =>
+        `<button class="filter-chip ${filter===f.key?'active':''}" onclick="setFilter('${f.key}')">${f.label} <span class="filter-chip-count">${f.count}</span></button>`
+      ).join('');
+
+      // Filter + paginate
+      let filtered = accounts;
+      if (filter === 'active') filtered = accounts.filter(a => a.status === 'VALID');
+      else if (filter === 'cooling') filtered = accounts.filter(a => a.status === 'RATE_LIMITED');
+      else if (filter === 'invalid') filtered = accounts.filter(a => ['AUTH_ERROR','BANNED'].includes(a.status));
+      else if (filter === 'disabled') filtered = accounts.filter(a => a.status === 'DISABLED');
+
+      const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+      if (page > totalPages) page = totalPages;
+      document.getElementById('pagi-info').textContent = `第 ${page} / ${totalPages} 页`;
+      document.getElementById('total-badge').textContent = filtered.length;
+
+      const paged = filtered.slice((page-1)*pageSize, page*pageSize);
+      document.getElementById('table-body').innerHTML = paged.length === 0
+        ? '<tr><td colspan="4" style="text-align:center;padding:48px;color:var(--fg-muted)">暂无账号</td></tr>'
+        : paged.map(a => `<tr>
+          <td><span class="tok">${maskToken(a.token)}</span> <button class="row-btn" onclick="copyToken('${a.token}')"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></td>
+          <td>${statusBadge(a.status)}</td>
+          <td style="font-size:12px;color:#666">${a.email}</td>
+          <td style="text-align:right"><button class="row-btn" onclick="verify('${a.email}')" title="验证"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.6-4.6"/><path d="M4 4v5h5"/><path d="M4 13a8 8 0 0 0 14.6 4.6"/><path d="M20 20v-5h-5"/></svg></button> <button class="row-btn row-btn-danger" onclick="del('${a.email}')" title="删除"><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></td>
+        </tr>`).join('');
+    }
+
+    function maskToken(t) { return t ? t.slice(0,10) + '...' + t.slice(-8) : '-' }
+    function statusBadge(s) {
+      const m = { VALID:['active','正常'], RATE_LIMITED:['cooling','限流'], AUTH_ERROR:['invalid','异常'], BANNED:['invalid','封禁'], DISABLED:['disabled','禁用'] };
+      const [cls, label] = m[s] || ['','未知'];
+      return `<span class="badge badge-${cls}">${label || s}</span>`;
+    }
+
+    function setFilter(f) { filter = f; page = 1; render() }
+    function prevPage() { if (page > 1) { page--; render() } }
+    function nextPage() { const tp = Math.ceil(accounts.length / pageSize); if (page < tp) { page++; render() } }
+    function copyToken(t) { navigator.clipboard.writeText(t); showToast('已复制') }
+
+    function showImport() { document.getElementById('import-panel').style.display = 'block' }
+    function hideImport() { document.getElementById('import-panel').style.display = 'none' }
+
+    async function doImport() {
+      const tokens = document.getElementById('import-tokens').value.trim();
+      if (!tokens) return;
+      await fetch('/api/admin/accounts/batch', { method:'POST', headers:jsonHeaders(), body:JSON.stringify({tokens}) });
+      showToast('导入成功');
+      hideImport();
+      document.getElementById('import-tokens').value = '';
+      fetchAccounts();
+    }
+
+    async function verify(email) {
+      const r = await fetch('/api/admin/accounts/'+encodeURIComponent(email)+'/verify', { method:'POST', headers:authHeaders() });
+      const d = await r.json();
+      showToast(d.valid ? '有效' : '无效');
+      fetchAccounts();
+    }
+
+    async function del(email) {
+      if (!confirm('确认删除?')) return;
+      await fetch('/api/admin/accounts/'+encodeURIComponent(email), { method:'DELETE', headers:authHeaders() });
+      showToast('已删除');
+      fetchAccounts();
+    }
+
+    init();
+  </script>
+</body>
+</html>

@@ -146,6 +146,36 @@ app.include_router(embeddings.router, tags=["Embeddings"])
 app.include_router(probes.router, tags=["Probes"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Dashboard Admin"])
 
+# ── 静态管理面板（纯 HTML，仿 grok2api）──────────────────────────────────────
+from fastapi.responses import FileResponse
+from pathlib import Path
+
+STATICS_DIR = Path(__file__).resolve().parent.parent / "statics"
+
+@app.get("/admin/login", include_in_schema=False)
+async def admin_login_page():
+    return FileResponse(STATICS_DIR / "login.html")
+
+@app.get("/admin/accounts", include_in_schema=False)
+async def admin_accounts_page():
+    return FileResponse(STATICS_DIR / "accounts.html")
+
+@app.get("/admin/config", include_in_schema=False)
+async def admin_config_page():
+    return FileResponse(STATICS_DIR / "config.html")
+
+@app.get("/admin/register", include_in_schema=False)
+async def admin_register_page():
+    return FileResponse(STATICS_DIR / "register.html")
+
+@app.get("/admin", include_in_schema=False)
+async def admin_root():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse("/admin/login")
+
+if STATICS_DIR.exists():
+    app.mount("/statics", StaticFiles(directory=str(STATICS_DIR)), name="statics")
+
 @app.get("/api", tags=["System"])
 async def root():
     return {

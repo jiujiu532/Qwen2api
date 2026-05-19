@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>qwen2api - Admin</title>
+  <link href="https://cdn.jsdelivr.net/npm/geist@1.0.0/dist/fonts/geist-sans/style.css" rel="stylesheet">
+  <link href="/statics/css/app.css" rel="stylesheet">
+</head>
+<body class="login-body">
+  <div class="login-shell">
+    <div class="login-card">
+      <div class="login-brand">qwen2api</div>
+      <div class="login-title">管理后台</div>
+      <div class="login-subtitle">请输入管理密钥以继续</div>
+      <div class="login-form">
+        <input type="password" id="key" placeholder="管理密钥" class="input" style="height:32px;font-size:12px">
+        <button onclick="login()" class="btn btn-primary" style="width:100%;font-size:12px">继续</button>
+      </div>
+    </div>
+  </div>
+  <script>
+    const el = document.getElementById('key');
+    el.addEventListener('keypress', e => { if (e.key === 'Enter') login() });
+
+    async function login() {
+      const key = el.value.trim();
+      if (!key) return;
+      try {
+        const r = await fetch('/api/admin/settings', { headers: { Authorization: 'Bearer ' + key } });
+        if (r.ok) { localStorage.setItem('qwen2api_key', key); location.href = '/admin/accounts'; }
+        else { alert('密钥无效'); }
+      } catch { alert('连接失败'); }
+    }
+
+    // 自动登录
+    (async () => {
+      const key = localStorage.getItem('qwen2api_key');
+      if (key) {
+        try {
+          const r = await fetch('/api/admin/settings', { headers: { Authorization: 'Bearer ' + key } });
+          if (r.ok) location.href = '/admin/accounts';
+        } catch {}
+      }
+    })();
+  </script>
+</body>
+</html>
