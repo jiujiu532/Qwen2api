@@ -349,9 +349,12 @@
       delete payload.app_url;
       delete payload.model_aliases;
       await fetch('/api/admin/settings', { method: 'PUT', headers: jsonHeaders(), body: JSON.stringify(payload) });
-      // 如果密码被修改了，更新 localStorage 中的 key
+      // 如果密码被修改了，清除 session 强制重新登录
       if (settings.admin_key && settings.admin_key !== configSnapshot.admin_key) {
-        localStorage.setItem('qwen2api_key', settings.admin_key);
+        localStorage.removeItem('qwen2api_key');
+        showToast('密码已修改，请重新登录');
+        setTimeout(() => { location.href = '/admin/login'; }, 1500);
+        return;
       }
       configSnapshot = JSON.parse(JSON.stringify(settings));
       dirty = false;
