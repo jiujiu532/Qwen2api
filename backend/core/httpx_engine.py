@@ -68,7 +68,7 @@ class HttpxEngine:
             return {"status": 0, "body": str(e)}
 
     async def fetch_chat(self, token: str, chat_id: str, payload: dict, buffered: bool = False):
-        """Stream Qwen SSE via curl_cffi -- 逐行读取 SSE 事件。"""
+        """Stream Qwen SSE via curl_cffi -- 逐 chunk 读取，手动按行分割。"""
         from curl_cffi.requests import AsyncSession
         url = self.base_url + f"/api/v2/chat/completions?chat_id={chat_id}"
         headers = {
@@ -89,12 +89,23 @@ class HttpxEngine:
                         yield {"status": resp.status_code, "body": body_text}
                         return
 
-                    # 使用 aiter_lines 逐行读取（自动处理解压）
-                    async for line in resp.aiter_lines():
-                        if not line:
+                    # 使用 aiter_content 逐 chunk 读取（真正的流式，不缓冲）
+                    buffer = ""
+                    async for raw_chunk in resp.aiter_content():
+                        if not raw_chunk:
                             continue
-                        decoded = line.decode("utf-8", errors="replace") if isinstance(line, bytes) else line
-                        yield {"status": "streamed", "chunk": decoded + "\n"}
+                        text = raw_chunk.decode("utf-8", errors="replace") if isinstance(raw_chunk, bytes) else raw_chunk
+                        buffer += text
+                        # 按行分割并逐行 yield
+                        while "\n" in buffer:
+                            line, buffer = buffer.split("\n", 1)
+                            line = line.strip()
+                            if not line:
+                                continue
+                            yield {"status": "streamed", "chunk": line + "\n"}
+                    # 处理剩余 buffer
+                    if buffer.strip():
+                        yield {"status": "streamed", "chunk": buffer.strip() + "\n"}
 
         except Exception as e:
             log.error(f"[HttpxEngine] fetch_chat error: {e}")
