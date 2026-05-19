@@ -150,6 +150,12 @@
               { key: 'tempmail_key', label: 'API Key', type: 'password', desc: 'TempMail 的 API 密钥。' },
             ]
           },
+          {
+            title: 'GuerrillaMail（公共）', section: 'guerrilla',
+            fields: [
+              { key: '_guerrilla_info', label: '状态', type: 'info', desc: '公共临时邮箱服务，无需配置。当 MoeMail 和 TempMail 均未配置时自动使用。稳定性较低，建议优先配置自建邮箱。' },
+            ]
+          },
         ]
       },
       {
@@ -264,6 +270,8 @@
         case 'json':
           const json = JSON.stringify(val || {}, null, 2);
           return `<textarea class="cfg-text" style="width:100%;min-height:300px;text-align:left;font-family:var(--font-mono);font-size:12px;line-height:1.6;resize:vertical;padding:12px" data-key="${field.key}" oninput="onInput(this)">${json}</textarea>`;
+        case 'info':
+          return `<span style="font-size:11px;color:var(--success);font-weight:500">可用 (Fallback)</span>`;
         default:
           return '';
       }
