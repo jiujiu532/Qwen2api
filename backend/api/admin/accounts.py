@@ -331,7 +331,7 @@ async def disable_memory_all(request: Request, _=Depends(_require_admin)):
     async def _stream_progress():
         success = 0
         failed = 0
-        sem = asyncio.Semaphore(20)
+        sem = asyncio.Semaphore(5)
 
         async def _disable_one(acc):
             nonlocal success, failed
