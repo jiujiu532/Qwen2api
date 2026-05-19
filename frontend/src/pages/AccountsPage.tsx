@@ -201,7 +201,7 @@ export default function AccountsPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-[14px] overflow-x-auto">
+      <div className="bg-white rounded-[14px] overflow-x-auto shadow-[0_1px_3px_rgba(0,0,0,.04)]">
         <table className="w-full border-collapse min-w-[900px]">
           <thead>
             <tr>
@@ -260,7 +260,7 @@ function StatCell({ label, value, color = "#111", icon }: { label: string; value
   }
 
   return (
-    <div className="min-h-[88px] p-[14px_16px] rounded-xl bg-white flex flex-col gap-3">
+    <div className="min-h-[88px] p-[14px_16px] rounded-xl bg-white shadow-[0_1px_3px_rgba(0,0,0,.04)] flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <span className="text-[11px] text-[#8a8a8a] tracking-wide">{label}</span>
         <span className="w-6 h-6 flex items-center justify-center" style={{ color: color === "#111" ? "#a3a3a3" : color }}>
