@@ -362,9 +362,26 @@
       showToast('正在关闭记忆...');
       try {
         const body = selected.length > 0 ? JSON.stringify({ emails: selected }) : '{}';
-        const r = await fetch('/api/admin/accounts/disable-memory', { method: 'POST', headers: jsonHeaders(), body });
-        const d = await r.json();
-        showToast(`完成: 成功 ${d.success} / 失败 ${d.failed} / 总计 ${d.total}`);
+        const resp = await fetch('/api/admin/accounts/disable-memory', { method: 'POST', headers: jsonHeaders(), body });
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split('\n'); buf = lines.pop();
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            try {
+              const d = JSON.parse(line.slice(6));
+              showToast(`进度: ${d.done}/${d.total} (成功${d.success} 失败${d.failed})`);
+              if (d.complete) {
+                showToast(`完成: 成功 ${d.success} / 失败 ${d.failed} / 总计 ${d.total}`);
+              }
+            } catch {}
+          }
+        }
       } catch (e) {
         showToast('操作失败: ' + e.message, 5000);
       }

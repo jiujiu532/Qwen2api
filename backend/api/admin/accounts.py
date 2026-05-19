@@ -310,11 +310,11 @@ async def stop_register(_=Depends(_require_admin)):
 
 @router.post("/accounts/disable-memory")
 async def disable_memory_all(request: Request, _=Depends(_require_admin)):
-    """批量关闭账号的记忆功能"""
+    """批量关闭账号的记忆功能（流式返回进度）"""
     import httpx
+    from fastapi.responses import StreamingResponse
     pool = request.app.state.account_pool
     
-    # 支持指定 emails 或全部
     try:
         body = await request.json()
     except Exception:
@@ -326,47 +326,57 @@ async def disable_memory_all(request: Request, _=Depends(_require_admin)):
     else:
         accounts_list = pool.all_accounts()
     
-    success = 0
-    failed = 0
+    total = len(accounts_list)
 
-    async def _disable_one(acc):
-        nonlocal success, failed
-        if not acc.token:
-            failed += 1
-            return
-        try:
-            headers = {
-                "Authorization": f"Bearer {acc.token}",
-                "Content-Type": "application/json",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Origin": "https://chat.qwen.ai",
-            }
-            # 1. 关闭 4 个记忆开关
-            body = {
-                "memory": {"enable_memory": False, "enable_history_memory": False},
-                "tools_enabled": {
-                    "history_retriever": False,
-                    "bio": False,
+    async def _stream_progress():
+        success = 0
+        failed = 0
+        sem = asyncio.Semaphore(20)
+
+        async def _disable_one(acc):
+            nonlocal success, failed
+            if not acc.token:
+                failed += 1
+                return
+            try:
+                headers = {
+                    "Authorization": f"Bearer {acc.token}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                    "Origin": "https://chat.qwen.ai",
                 }
-            }
-            async with httpx.AsyncClient(timeout=10) as hc:
-                resp = await hc.post("https://chat.qwen.ai/api/v2/users/user/settings/update", headers=headers, json=body)
-                if resp.status_code != 200:
-                    failed += 1
-                    return
-                # 2. 删除所有已有记忆（"忘记一切"）
-                await hc.post("https://chat.qwen.ai/api/v2/memories/delete", headers=headers, json={"forget_all": True})
-            success += 1
-        except Exception:
-            failed += 1
+                body_data = {
+                    "memory": {"enable_memory": False, "enable_history_memory": False},
+                    "tools_enabled": {
+                        "history_retriever": False,
+                        "bio": False,
+                    }
+                }
+                async with httpx.AsyncClient(timeout=10) as hc:
+                    resp = await hc.post("https://chat.qwen.ai/api/v2/users/user/settings/update", headers=headers, json=body_data)
+                    if resp.status_code != 200:
+                        failed += 1
+                        return
+                    await hc.post("https://chat.qwen.ai/api/v2/memories/delete", headers=headers, json={"forget_all": True})
+                success += 1
+            except Exception:
+                failed += 1
 
-    # 并发执行（限制 20 并发）
-    sem = asyncio.Semaphore(20)
-    async def _with_sem(acc):
-        async with sem:
-            await _disable_one(acc)
+        async def _with_sem(acc):
+            async with sem:
+                await _disable_one(acc)
 
-    tasks = [_with_sem(acc) for acc in accounts_list]
-    await asyncio.gather(*tasks)
-    log.info(f"[Admin] 批量关闭记忆完成: success={success} failed={failed}")
-    return {"ok": True, "success": success, "failed": failed, "total": len(accounts_list)}
+        # 分批执行并报告进度
+        batch_size = 20
+        for i in range(0, total, batch_size):
+            batch = accounts_list[i:i+batch_size]
+            tasks = [_with_sem(acc) for acc in batch]
+            await asyncio.gather(*tasks)
+            done = success + failed
+            yield f"data: {json.dumps({'done': done, 'total': total, 'success': success, 'failed': failed})}\n\n"
+
+        yield f"data: {json.dumps({'done': total, 'total': total, 'success': success, 'failed': failed, 'complete': True})}\n\n"
+        log.info(f"[Admin] 批量关闭记忆完成: success={success} failed={failed}")
+
+    return StreamingResponse(_stream_progress(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
