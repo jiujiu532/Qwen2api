@@ -31,17 +31,18 @@ export default function AccountsPage() {
 
   const stats = {
     total: accounts.length,
-    active: accounts.filter(a => a.status === "valid").length,
-    cooling: accounts.filter(a => a.status === "rate_limited").length,
-    invalid: accounts.filter(a => ["auth_error", "banned"].includes(a.status)).length,
-    disabled: accounts.filter(a => a.status === "disabled").length,
+    active: accounts.filter(a => a.status?.toUpperCase() === "VALID").length,
+    cooling: accounts.filter(a => a.status?.toUpperCase() === "RATE_LIMITED").length,
+    invalid: accounts.filter(a => ["AUTH_ERROR", "BANNED"].includes(a.status?.toUpperCase())).length,
+    disabled: accounts.filter(a => a.status?.toUpperCase() === "DISABLED").length,
   }
 
   const filtered = filter === "all" ? accounts : accounts.filter(a => {
-    if (filter === "active") return a.status === "valid"
-    if (filter === "cooling") return a.status === "rate_limited"
-    if (filter === "invalid") return ["auth_error", "banned"].includes(a.status)
-    if (filter === "disabled") return a.status === "disabled"
+    const s = a.status?.toUpperCase()
+    if (filter === "active") return s === "VALID"
+    if (filter === "cooling") return s === "RATE_LIMITED"
+    if (filter === "invalid") return ["AUTH_ERROR", "BANNED"].includes(s)
+    if (filter === "disabled") return s === "DISABLED"
     return true
   })
 
@@ -79,14 +80,15 @@ export default function AccountsPage() {
   }
 
   const statusBadge = (status: string) => {
+    const s = status?.toUpperCase()
     const map: Record<string, { variant: any; label: string }> = {
-      valid: { variant: "active", label: "正常" },
-      rate_limited: { variant: "cooling", label: "限流" },
-      auth_error: { variant: "invalid", label: "异常" },
-      banned: { variant: "invalid", label: "封禁" },
-      disabled: { variant: "disabled", label: "禁用" },
+      VALID: { variant: "active", label: "正常" },
+      RATE_LIMITED: { variant: "cooling", label: "限流" },
+      AUTH_ERROR: { variant: "invalid", label: "异常" },
+      BANNED: { variant: "invalid", label: "封禁" },
+      DISABLED: { variant: "disabled", label: "禁用" },
     }
-    const m = map[status] || { variant: "basic", label: status }
+    const m = map[s] || { variant: "basic", label: status }
     return <Badge variant={m.variant}>{m.label}</Badge>
   }
 
