@@ -701,3 +701,160 @@ def _inject_force_text(prompt: str, reason: str) -> str:
         return prompt[:-len("Assistant:")] + force_text + "\nAssistant:"
     else:
         return prompt + "\n\n" + force_text + "\nAssistant:"
+
+
+# ============================================================================
+# 协议无关的结构化结果（Phase 2 新增）
+# ============================================================================
+
+from dataclasses import dataclass, field
+
+
+@dataclass
+class CompletionResult:
+    """协议无关的 completion 结果，供各协议路由层格式化。"""
+    answer_text: str = ""
+    reasoning_text: str = ""
+    tool_blocks: list = field(default_factory=list)
+    stop: str = "end_turn"  # "end_turn" | "tool_use"
+    usage: dict = field(default_factory=dict)
+
+
+async def completions_raw(
+    *,
+    client: QwenClient,
+    model: str,
+    prompt: str,
+    tools: list[dict],
+    thinking: Optional[bool],
+    history_messages: list,
+) -> CompletionResult:
+    """协议无关的 completion 执行器（非流式）。
+
+    内部处理重试/NativeBlock/工具循环，返回结构化结果。
+    各协议路由层负责格式化为自己的响应格式。
+    """
+    max_attempts = settings.TOOL_MAX_RETRIES if tools else settings.MAX_RETRIES
+    current_prompt = prompt
+    excluded_accounts: set = set()
+    force_xml_mode = bool(tools)
+
+    for attempt in range(max_attempts):
+        chat_id: Optional[str] = None
+        acc: Optional[Account] = None
+        try:
+            events = []
+            async for item in client.chat_stream_events_with_retry(
+                model, current_prompt, has_custom_tools=bool(tools),
+                xml_mode=force_xml_mode, exclude_accounts=excluded_accounts,
+                thinking=thinking
+            ):
+                if item["type"] == "meta":
+                    chat_id = item["chat_id"]
+                    acc = item["acc"]
+                    continue
+                if item["type"] == "event":
+                    events.append(item["event"])
+
+            # 解析事件
+            answer_text = ""
+            reasoning_text = ""
+            native_tc_chunks: dict = {}
+            for evt in events:
+                if evt["type"] != "delta":
+                    continue
+                phase = evt.get("phase", "")
+                content = evt.get("content", "")
+                if phase in ("think", "thinking_summary") and content:
+                    reasoning_text += content
+                elif phase == "answer" and content:
+                    answer_text += content
+                elif phase == "tool_call" and content:
+                    tc_id = evt.get("extra", {}).get("tool_call_id", "tc_0")
+                    if tc_id not in native_tc_chunks:
+                        native_tc_chunks[tc_id] = {"name": "", "args": ""}
+                    try:
+                        chunk = json.loads(content)
+                        if "name" in chunk:
+                            native_tc_chunks[tc_id]["name"] = chunk["name"]
+                        if "arguments" in chunk:
+                            native_tc_chunks[tc_id]["args"] += chunk["arguments"]
+                    except (json.JSONDecodeError, ValueError):
+                        native_tc_chunks[tc_id]["args"] += content
+                if evt.get("status") == "finished" and phase == "answer":
+                    break
+
+            # 原生 TC 转为 answer_text
+            if native_tc_chunks and not answer_text:
+                tc_parts = []
+                for tc_id, tc in native_tc_chunks.items():
+                    name = tc["name"]
+                    try:
+                        inp = json.loads(tc["args"]) if tc["args"] else {}
+                    except (json.JSONDecodeError, ValueError):
+                        inp = {"raw": tc["args"]}
+                    tc_parts.append(
+                        f'<tool_call>{{"name": {json.dumps(name)}, "input": {json.dumps(inp, ensure_ascii=False)}}}</tool_call>'
+                    )
+                answer_text = "\n".join(tc_parts)
+
+            # NativeBlock 检测
+            blocked_names = _extract_blocked_tool_names(answer_text.strip())
+            if blocked_names and tools and attempt < max_attempts - 1:
+                if acc:
+                    client.account_pool.release(acc)
+                    if chat_id:
+                        aio.create_task(client.delete_chat(acc.token, chat_id))
+                force_xml_mode = True
+                current_prompt = inject_format_reminder(current_prompt, blocked_names[0])
+                log.warning(f"[Engine-Raw] NativeBlock '{blocked_names[0]}'，切 XML 重试")
+                await aio.sleep(0.15)
+                continue
+
+            # 工具调用解析
+            tool_blocks, stop = parse_tool_calls(answer_text, tools)
+            has_tool_call = stop == "tool_use"
+
+            # 工具循环检测
+            if has_tool_call:
+                first_tool = next((b for b in tool_blocks if b.get("type") == "tool_use"), None)
+                if first_tool:
+                    blocked_tc, blocked_reason = should_block_tool_call(
+                        history_messages, first_tool.get("name", ""), first_tool.get("input", {})
+                    )
+                    if blocked_tc and attempt < max_attempts - 1:
+                        if acc:
+                            client.account_pool.release(acc)
+                            if chat_id:
+                                aio.create_task(client.delete_chat(acc.token, chat_id))
+                        current_prompt = _inject_force_text(current_prompt, blocked_reason)
+                        await aio.sleep(0.15)
+                        continue
+
+            # 释放账号
+            if acc:
+                client.account_pool.release(acc)
+                if chat_id:
+                    aio.create_task(client.delete_chat(acc.token, chat_id))
+
+            # 计算 usage
+            usage = calculate_usage(prompt, answer_text)
+
+            return CompletionResult(
+                answer_text=answer_text,
+                reasoning_text=reasoning_text,
+                tool_blocks=tool_blocks,
+                stop=stop,
+                usage=usage,
+            )
+
+        except Exception as e:
+            if acc and acc.inflight > 0:
+                client.account_pool.release(acc)
+                if chat_id:
+                    aio.create_task(client.delete_chat(acc.token, chat_id))
+            if attempt == max_attempts - 1:
+                raise
+            await aio.sleep(1)
+
+    raise Exception("All retries exhausted without response")
