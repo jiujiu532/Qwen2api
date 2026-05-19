@@ -310,10 +310,22 @@ async def stop_register(_=Depends(_require_admin)):
 
 @router.post("/accounts/disable-memory")
 async def disable_memory_all(request: Request, _=Depends(_require_admin)):
-    """批量关闭所有账号的记忆功能"""
+    """批量关闭账号的记忆功能"""
     import httpx
     pool = request.app.state.account_pool
-    accounts = pool.all_accounts()
+    
+    # 支持指定 emails 或全部
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    target_emails = body.get("emails", [])
+    
+    if target_emails:
+        accounts_list = [acc for acc in pool.all_accounts() if acc.email in target_emails]
+    else:
+        accounts_list = pool.all_accounts()
+    
     success = 0
     failed = 0
 
@@ -354,7 +366,7 @@ async def disable_memory_all(request: Request, _=Depends(_require_admin)):
         async with sem:
             await _disable_one(acc)
 
-    tasks = [_with_sem(acc) for acc in accounts]
+    tasks = [_with_sem(acc) for acc in accounts_list]
     await asyncio.gather(*tasks)
     log.info(f"[Admin] 批量关闭记忆完成: success={success} failed={failed}")
-    return {"ok": True, "success": success, "failed": failed, "total": len(accounts)}
+    return {"ok": True, "success": success, "failed": failed, "total": len(accounts_list)}

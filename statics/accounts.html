@@ -352,7 +352,7 @@
 
     async function disableMemory() {
       const selected = getSelectedEmails();
-      let msg, endpoint;
+      let msg;
       if (selected.length > 0) {
         msg = `确认关闭选中 ${selected.length} 个账号的记忆功能？此操作将关闭记忆开关并删除已有记忆数据，不可撤销。`;
       } else {
@@ -361,26 +361,10 @@
       if (!confirm(msg)) return;
       showToast('正在关闭记忆...');
       try {
-        if (selected.length > 0) {
-          // 逐个关闭选中账号的记忆
-          let success = 0, failed = 0;
-          for (const email of selected) {
-            const acc = accounts.find(a => a.email === email);
-            if (!acc || !acc.token) { failed++; continue; }
-            try {
-              const headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + acc.token, 'User-Agent': 'Mozilla/5.0', 'Origin': 'https://chat.qwen.ai' };
-              await fetch('https://chat.qwen.ai/api/v2/users/user/settings/update', { method: 'POST', headers, body: JSON.stringify({memory:{enable_memory:false,enable_history_memory:false},tools_enabled:{history_retriever:false,bio:false}}) });
-              await fetch('https://chat.qwen.ai/api/v2/memories/delete', { method: 'POST', headers, body: JSON.stringify({forget_all:true}) });
-              success++;
-            } catch { failed++; }
-          }
-          showToast(`完成: 成功 ${success} / 失败 ${failed}`);
-        } else {
-          // 全部账号通过后端 API
-          const r = await fetch('/api/admin/accounts/disable-memory', { method: 'POST', headers: authHeaders() });
-          const d = await r.json();
-          showToast(`完成: 成功 ${d.success} / 失败 ${d.failed} / 总计 ${d.total}`);
-        }
+        const body = selected.length > 0 ? JSON.stringify({ emails: selected }) : '{}';
+        const r = await fetch('/api/admin/accounts/disable-memory', { method: 'POST', headers: jsonHeaders(), body });
+        const d = await r.json();
+        showToast(`完成: 成功 ${d.success} / 失败 ${d.failed} / 总计 ${d.total}`);
       } catch (e) {
         showToast('操作失败: ' + e.message, 5000);
       }
