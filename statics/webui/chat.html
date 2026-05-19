@@ -38,6 +38,9 @@
 
     /* Workspace */
     .webui-workspace{flex:1;display:flex;flex-direction:column;min-width:0;position:relative}
+    .webui-expand-btn{position:absolute;top:12px;left:12px;z-index:10;width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#75716b;background:transparent;transition:background .15s,color .15s}
+    .webui-expand-btn:hover{background:#efeeea;color:#1f1f1d}
+    .webui-expand-btn svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8}
     .webui-thread{flex:1;overflow-y:auto}
     .webui-thread-inner{max-width:720px;width:100%;margin:0 auto;padding:40px 24px 24px;min-height:100%;display:flex;flex-direction:column}
 
@@ -116,6 +119,10 @@
     </aside>
 
     <section class="webui-workspace">
+      <!-- 侧边栏展开按钮（收起时显示） -->
+      <button class="webui-expand-btn" id="expand-btn" onclick="toggleSidebar()" title="展开侧栏" style="display:none">
+        <svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="3.5"/><path d="M10 5v14"/></svg>
+      </button>
       <div class="webui-thread" id="thread">
         <div class="webui-thread-inner" id="thread-inner">
           <div class="webui-empty">
@@ -479,7 +486,13 @@
       });
     }
 
-    function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const expandBtn = document.getElementById('expand-btn');
+      sidebar.classList.toggle('collapsed');
+      const isCollapsed = sidebar.classList.contains('collapsed');
+      expandBtn.style.display = isCollapsed ? 'flex' : 'none';
+    }
 
     init();
   </script>
