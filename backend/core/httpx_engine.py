@@ -68,42 +68,45 @@ class HttpxEngine:
             return {"status": 0, "body": str(e)}
 
     async def fetch_chat(self, token: str, chat_id: str, payload: dict, buffered: bool = False):
-        """Stream Qwen SSE -- 使用标准 httpx 实现真正的流式读取。"""
-        import httpx as _httpx
+        """Stream Qwen SSE via curl_cffi -- 使用 stream=True + aiter_lines。"""
+        from curl_cffi.requests import AsyncSession
         url = self.base_url + f"/api/v2/chat/completions?chat_id={chat_id}"
         headers = {
             **self._auth_headers(token),
             "Content-Type": "application/json",
             "Accept": "text/event-stream",
-            "Accept-Encoding": "identity",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Origin": "https://chat.qwen.ai",
             "Referer": "https://chat.qwen.ai/",
         }
-        body_str = json.dumps(payload, ensure_ascii=False)
+        body_bytes = json.dumps(payload, ensure_ascii=False).encode()
 
         try:
-            async with _httpx.AsyncClient(timeout=_httpx.Timeout(120, connect=15)) as client:
-                async with client.stream("POST", url, headers=headers, content=body_str.encode()) as resp:
-                    if resp.status_code != 200:
-                        body_text = (await resp.aread()).decode(errors="replace")[:2000]
-                        yield {"status": resp.status_code, "body": body_text}
-                        return
+            session = AsyncSession(impersonate=_IMPERSONATE, timeout=120)
+            try:
+                response = await session.post(
+                    url, headers=headers, data=body_bytes, stream=True
+                )
 
-                    # 使用 aiter_bytes 逐 chunk 读取（最底层，无缓冲）
-                    buffer = b""
-                    async for raw in resp.aiter_bytes():
-                        if not raw:
-                            continue
-                        buffer += raw
-                        while b"\n" in buffer:
-                            line_bytes, buffer = buffer.split(b"\n", 1)
-                            line = line_bytes.decode("utf-8", errors="replace").strip()
-                            if not line:
-                                continue
-                            yield {"status": "streamed", "chunk": line + "\n"}
-                    if buffer.strip():
-                        yield {"status": "streamed", "chunk": buffer.decode("utf-8", errors="replace").strip() + "\n"}
+                if response.status_code != 200:
+                    try:
+                        body_text = (response.content).decode("utf-8", "replace")[:2000]
+                    except Exception:
+                        body_text = ""
+                    yield {"status": response.status_code, "body": body_text}
+                    await session.close()
+                    return
+
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
+                    decoded = line.decode("utf-8", errors="replace") if isinstance(line, bytes) else line
+                    yield {"status": "streamed", "chunk": decoded + "\n"}
+            finally:
+                try:
+                    await session.close()
+                except Exception:
+                    pass
 
         except Exception as e:
             log.error(f"[HttpxEngine] fetch_chat error: {e}")
