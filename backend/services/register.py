@@ -344,8 +344,8 @@ async def perform_batch_registration(
                     body = {
                         "memory": {"enable_memory": False, "enable_history_memory": False},
                         "tools_enabled": {
-                            "memory_retrieval": False,
-                            "memory_update": False,
+                            "history_retriever": False,
+                            "bio": False,
                         }
                     }
                     async with httpx.AsyncClient(timeout=10) as hc:

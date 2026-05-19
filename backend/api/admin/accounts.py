@@ -332,8 +332,8 @@ async def disable_memory_all(request: Request, _=Depends(_require_admin)):
             body = {
                 "memory": {"enable_memory": False, "enable_history_memory": False},
                 "tools_enabled": {
-                    "memory_retrieval": False,
-                    "memory_update": False,
+                    "history_retriever": False,
+                    "bio": False,
                 }
             }
             async with httpx.AsyncClient(timeout=10) as hc:
