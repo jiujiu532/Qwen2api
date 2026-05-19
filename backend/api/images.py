@@ -190,12 +190,16 @@ async def create_image(request: Request):
         response_format = body.get("response_format", "url")
         if response_format == "b64_json":
             import httpx, base64
+            from backend.services.image_proxy import save_image
             b64_data = []
             async with httpx.AsyncClient(timeout=30, follow_redirects=True) as hc:
                 for url in collected_urls[:n]:
                     try:
                         resp = await hc.get(url)
                         if resp.status_code == 200:
+                            content_type = resp.headers.get("content-type", "image/png")
+                            # 保存到本地缓存
+                            save_image(resp.content, content_type)
                             b64 = base64.b64encode(resp.content).decode()
                             b64_data.append({"b64_json": b64, "revised_prompt": prompt})
                         else:
@@ -203,6 +207,22 @@ async def create_image(request: Request):
                     except Exception:
                         b64_data.append({"url": url, "revised_prompt": prompt})
             data = b64_data
+        else:
+            # url 格式也保存到本地缓存
+            import httpx
+            from backend.services.image_proxy import save_image
+            try:
+                async with httpx.AsyncClient(timeout=30, follow_redirects=True) as hc:
+                    for url in collected_urls[:n]:
+                        try:
+                            resp = await hc.get(url)
+                            if resp.status_code == 200:
+                                content_type = resp.headers.get("content-type", "image/png")
+                                save_image(resp.content, content_type)
+                        except Exception:
+                            pass
+            except Exception:
+                pass
         # 记录使用统计：每张图片计 1 次，prompt token 均摊，图片固定 1000 token
         try:
             um = request.app.state.usage_manager
