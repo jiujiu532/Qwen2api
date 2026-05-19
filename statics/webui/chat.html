@@ -300,42 +300,56 @@
       }
 
       const targetSessionId = currentSessionId;
-      messages.push({ role: 'user', content: text });
-      ta.value = ''; ta.style.height = 'auto';
-      renderThread(); saveCurrentSession();
+      const session = sessions.find(x => x.id === targetSessionId);
 
-      // 禁用发送按钮（当前会话正在请求）
+      // 添加 user 消息到 session
+      const userMsg = { role: 'user', content: text };
+      session.messages.push(userMsg);
+      messages = [...session.messages]; // 同步全局
+      ta.value = ''; ta.style.height = 'auto';
+      if (!session.titleLocked) { session.title = text.slice(0, 28); }
+      saveSessions();
+      renderThread(); renderSessions();
+
+      // 禁用发送按钮
       document.getElementById('send-btn').disabled = true;
       pendingRequests.add(targetSessionId);
       const model = document.getElementById('model-select').value;
       const key = getKey();
       if (!key) { location.href = '/webui/login'; return; }
 
-      messages.push({ role: 'assistant', content: '', reasoning: '' });
-      // 创建流式 DOM 结构
-      const inner = document.getElementById('thread-inner');
-      const msgDiv = document.createElement('div');
-      msgDiv.className = 'webui-msg webui-msg-assistant';
-      const bubble = document.createElement('div');
-      bubble.className = 'webui-bubble';
-      const thinkWrap = document.createElement('div');
-      thinkWrap.className = 'webui-thinking';
-      thinkWrap.style.display = 'none';
-      thinkWrap.innerHTML = `<div class="webui-thinking-toggle" onclick="this.classList.toggle('collapsed');this.nextElementSibling.classList.toggle('hidden')">思考过程 <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></div><div class="webui-thinking-body"></div>`;
-      const thinkBody = thinkWrap.querySelector('.webui-thinking-body');
-      const contentEl = document.createElement('div');
-      contentEl.className = 'webui-content-stream';
-      contentEl.innerHTML = '<span class="typing-dots"><span></span><span></span><span></span></span>';
-      bubble.appendChild(thinkWrap);
-      bubble.appendChild(contentEl);
-      msgDiv.appendChild(bubble);
-      inner.appendChild(msgDiv);
-      const thread = document.getElementById('thread');
-      thread.scrollTop = thread.scrollHeight;
+      // 添加空 assistant 占位
+      const assistantMsg = { role: 'assistant', content: '', reasoning: '' };
+      session.messages.push(assistantMsg);
+      if (currentSessionId === targetSessionId) {
+        messages = [...session.messages];
+      }
 
-      // 保存当前 messages 的引用索引
-      const assistantIdx = messages.length - 1;
-      const requestMessages = messages.slice(0, -1); // 不含空 assistant
+      // 创建 DOM（仅当前会话可见时）
+      let thinkWrap, thinkBody, contentEl;
+      if (currentSessionId === targetSessionId) {
+        const inner = document.getElementById('thread-inner');
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'webui-msg webui-msg-assistant';
+        const bubble = document.createElement('div');
+        bubble.className = 'webui-bubble';
+        thinkWrap = document.createElement('div');
+        thinkWrap.className = 'webui-thinking';
+        thinkWrap.style.display = 'none';
+        thinkWrap.innerHTML = `<div class="webui-thinking-toggle" onclick="this.classList.toggle('collapsed');this.nextElementSibling.classList.toggle('hidden')">思考过程 <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></div><div class="webui-thinking-body"></div>`;
+        thinkBody = thinkWrap.querySelector('.webui-thinking-body');
+        contentEl = document.createElement('div');
+        contentEl.className = 'webui-content-stream';
+        contentEl.innerHTML = '<span class="typing-dots"><span></span><span></span><span></span></span>';
+        bubble.appendChild(thinkWrap);
+        bubble.appendChild(contentEl);
+        msgDiv.appendChild(bubble);
+        inner.appendChild(msgDiv);
+        document.getElementById('thread').scrollTop = document.getElementById('thread').scrollHeight;
+      }
+
+      // 构建请求 messages（不含空 assistant）
+      const requestMessages = session.messages.slice(0, -1);
 
       try {
         const resp = await fetch('/v1/chat/completions', {
@@ -345,13 +359,14 @@
         });
         if (!resp.ok) {
           const errText = await resp.text();
-          messages[assistantIdx].content = '错误 (' + resp.status + '): ' + errText.slice(0, 200);
-          if (currentSessionId === targetSessionId) renderThread();
+          assistantMsg.content = '错误 (' + resp.status + '): ' + errText.slice(0, 200);
+          saveSessions();
+          if (currentSessionId === targetSessionId) { messages = [...session.messages]; renderThread(); }
           finishRequest(targetSessionId);
           return;
         }
 
-        // 收集全部内容
+        // 收集全部 SSE 内容
         const reader = resp.body.getReader();
         const decoder = new TextDecoder();
         let buf = '', content = '', reasoning = '';
@@ -374,12 +389,13 @@
           }
         }
 
-        // 更新 messages
-        messages[assistantIdx].reasoning = reasoning;
-        messages[assistantIdx].content = content;
+        // 写入 session
+        assistantMsg.reasoning = reasoning;
+        assistantMsg.content = content;
+        saveSessions();
 
-        // 只有当前显示的是这个会话时才做打字机动画
-        if (currentSessionId === targetSessionId) {
+        // 打字机动画（仅当前会话可见时）
+        if (currentSessionId === targetSessionId && thinkWrap && contentEl) {
           if (reasoning) {
             thinkWrap.style.display = '';
             contentEl.innerHTML = '';
@@ -390,23 +406,22 @@
             await typewrite(contentEl, content, 15);
             contentEl.innerHTML = renderMd(content);
           }
+          messages = [...session.messages];
         }
       } catch (e) {
-        messages[assistantIdx].content = '网络错误: ' + e.message;
-        if (currentSessionId === targetSessionId) {
+        assistantMsg.content = '网络错误: ' + e.message;
+        saveSessions();
+        if (currentSessionId === targetSessionId && contentEl) {
           contentEl.textContent = '网络错误: ' + e.message;
+          messages = [...session.messages];
         }
       }
 
-      // 保存并恢复状态
-      const s = sessions.find(x => x.id === targetSessionId);
-      if (s) { s.messages = [...messages]; const first = messages.find(m => m.role === 'user'); if (first && !s.titleLocked) s.title = first.content.slice(0, 28); saveSessions(); }
       finishRequest(targetSessionId);
     }
 
     function finishRequest(sessionId) {
       pendingRequests.delete(sessionId);
-      // 如果当前会话就是完成的会话，恢复发送按钮
       if (currentSessionId === sessionId) {
         document.getElementById('send-btn').disabled = false;
       }
