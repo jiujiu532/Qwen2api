@@ -4,7 +4,7 @@ settings.py -- 设置管理端点
 
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
-from backend.core.config import settings, MODEL_MAP, save_runtime_settings
+from backend.core.config import settings, MODEL_MAP, save_runtime_settings, DEFAULT_MODEL_ALIASES
 from . import _require_admin
 
 log = logging.getLogger("qwen2api.admin")
@@ -13,7 +13,6 @@ router = APIRouter()
 
 @router.get("/settings")
 async def get_settings(_=Depends(_require_admin)):
-    from backend.core.config import DEFAULT_MODEL_ALIASES
     merged_aliases = dict(DEFAULT_MODEL_ALIASES)
     merged_aliases.update(MODEL_MAP)
     return {
@@ -40,6 +39,36 @@ async def get_settings(_=Depends(_require_admin)):
         "proxy_username": getattr(settings, "PROXY_USERNAME", ""),
         "proxy_password": getattr(settings, "PROXY_PASSWORD", ""),
         "default_stream": getattr(settings, "DEFAULT_STREAM", True),
+    }
+
+
+@router.get("/settings/defaults")
+async def get_default_settings(_=Depends(_require_admin)):
+    """返回所有配置项的默认值"""
+    return {
+        "admin_key": "123456",
+        "max_inflight_per_account": 1,
+        "engine_mode": "hybrid",
+        "model_aliases": dict(DEFAULT_MODEL_ALIASES),
+        "moemail_domain": "",
+        "moemail_key": "",
+        "tempmail_domain": "",
+        "tempmail_key": "",
+        "auto_replenish": False,
+        "replenish_target": 30,
+        "replenish_concurrency": 3,
+        "max_rpm_per_account": 50,
+        "max_tpm_per_account": 500000,
+        "cache_ttl_seconds": 60,
+        "racing_enabled": False,
+        "auto_replenish_on_exhaust": True,
+        "replenish_exhaust_count": 10,
+        "replenish_exhaust_concurrency": 3,
+        "proxy_enabled": False,
+        "proxy_url": "",
+        "proxy_username": "",
+        "proxy_password": "",
+        "default_stream": True,
     }
 
 

@@ -5,14 +5,15 @@ function jsonHeaders() { return { ...authHeaders(), 'Content-Type': 'application
 
 function logout() { localStorage.removeItem('qwen2api_key'); location.href = '/admin/login' }
 
-function showToast(msg) {
+function showToast(msg, duration) {
+  if (!duration) duration = 2500;
   let wrap = document.querySelector('.toast-wrap');
   if (!wrap) { wrap = document.createElement('div'); wrap.className = 'toast-wrap'; document.body.appendChild(wrap) }
   const t = document.createElement('div');
   t.className = 'toast';
   t.textContent = msg;
   wrap.appendChild(t);
-  setTimeout(() => t.remove(), 2500);
+  setTimeout(() => t.remove(), duration);
 }
 
 // 渲染 header

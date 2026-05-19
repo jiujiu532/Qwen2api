@@ -28,6 +28,22 @@
     <!-- System Info -->
     <div class="stat-grid" style="grid-template-columns:repeat(3,1fr)" id="sys-stats"></div>
 
+    <!-- Progress Section -->
+    <div id="progress-section" style="display:none;margin-bottom:20px">
+      <div class="config-card" style="padding:16px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px">
+          <span id="progress-text">注册中 0/0</span>
+          <span id="progress-stats">成功: 0 | 失败: 0</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+        </div>
+        <div id="progress-error" style="display:none;margin-top:8px;font-size:11px;color:var(--error)">
+          连接已断开 <button class="btn btn-secondary" style="height:24px;font-size:11px;margin-left:8px" onclick="reconnectSSE()">重新连接</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Control Panel -->
     <div class="config-card" style="margin-bottom:20px">
       <div style="font-size:13px;font-weight:600;margin-bottom:16px">注册控制</div>
@@ -60,17 +76,28 @@
       <div style="font-size:13px;font-weight:600;margin-bottom:12px">实时日志</div>
       <div class="log-box" id="log-box">等待日志...</div>
     </div>
+
+    <!-- Register History -->
+    <div class="config-card" style="margin-top:20px">
+      <div style="font-size:13px;font-weight:600;margin-bottom:12px">注册历史</div>
+      <div id="history-list" style="font-size:12px;color:#666"></div>
+    </div>
   </main>
 
   <script src="/statics/js/common.js"></script>
   <script>
     let logInterval = null;
+    let eventSource = null;
+    let reconnectAttempts = 0;
+    let regStartTime = 0;
+    let regTotalCount = 0;
 
     async function init() {
       if (!await checkAuth()) return;
       renderHeader('register');
       await fetchSysInfo();
       startLogPolling();
+      loadHistory();
     }
 
     async function fetchSysInfo() {
@@ -118,6 +145,10 @@
         showToast(d.message);
         document.getElementById('btn-start').style.display = 'none';
         document.getElementById('btn-stop').style.display = '';
+        regStartTime = Date.now();
+        regTotalCount = count;
+        showProgress(0, count, 0, 0);
+        connectSSE();
       } else {
         showToast('启动失败');
       }
@@ -128,6 +159,133 @@
       showToast('停止信号已发送');
       document.getElementById('btn-start').style.display = '';
       document.getElementById('btn-stop').style.display = 'none';
+      disconnectSSE();
+    }
+
+    // SSE 进度条
+    function connectSSE() {
+      const key = getKey();
+      eventSource = new EventSource('/api/admin/events?key=' + encodeURIComponent(key));
+      document.getElementById('progress-error').style.display = 'none';
+
+      eventSource.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.type === 'register_progress') {
+            const done = (data.success || 0) + (data.failed || 0);
+            const total = data.total || regTotalCount;
+            showProgress(done, total, data.success || 0, data.failed || 0);
+          } else if (data.type === 'register_complete') {
+            const done = (data.success || 0) + (data.failed || 0);
+            completeProgress(data.success || 0, data.failed || 0, done);
+            disconnectSSE();
+          }
+        } catch {}
+      };
+
+      eventSource.onerror = () => {
+        eventSource.close();
+        eventSource = null;
+        document.getElementById('progress-error').style.display = '';
+        reconnectAttempts++;
+        if (reconnectAttempts >= 3) {
+          const btn = document.querySelector('#progress-error button');
+          if (btn) { btn.disabled = true; btn.textContent = '请刷新页面'; }
+        }
+      };
+    }
+
+    function disconnectSSE() {
+      if (eventSource) { eventSource.close(); eventSource = null; }
+    }
+
+    function reconnectSSE() {
+      if (reconnectAttempts >= 3) return;
+      connectSSE();
+    }
+
+    function showProgress(done, total, success, failed) {
+      const section = document.getElementById('progress-section');
+      section.style.display = '';
+      const pct = total > 0 ? Math.round(done / total * 100) : 0;
+      document.getElementById('progress-fill').style.width = pct + '%';
+      document.getElementById('progress-fill').classList.remove('done');
+      document.getElementById('progress-text').textContent = `注册中 ${done}/${total}`;
+      document.getElementById('progress-stats').textContent = `成功: ${success} | 失败: ${failed}`;
+    }
+
+    function completeProgress(success, failed, total) {
+      const pct = 100;
+      document.getElementById('progress-fill').style.width = pct + '%';
+      document.getElementById('progress-fill').classList.add('done');
+      document.getElementById('progress-text').textContent = `注册完成 ${total}/${regTotalCount}`;
+      document.getElementById('progress-stats').textContent = `成功: ${success} | 失败: ${failed}`;
+      document.getElementById('btn-start').style.display = '';
+      document.getElementById('btn-stop').style.display = 'none';
+      // 保存历史
+      const duration = ((Date.now() - regStartTime) / 1000).toFixed(1);
+      saveHistory({ startTime: new Date(regStartTime).toISOString(), count: regTotalCount, success, failed, duration: +duration });
+      reconnectAttempts = 0;
+    }
+
+    // 注册历史记录
+    const HISTORY_KEY = 'qwen2api_register_history';
+    const MAX_HISTORY = 50;
+
+    function loadHistory() {
+      try {
+        const raw = localStorage.getItem(HISTORY_KEY);
+        const list = raw ? JSON.parse(raw) : [];
+        renderHistory(list);
+      } catch {
+        renderHistory([]);
+        console.warn('读取注册历史失败');
+      }
+    }
+
+    function saveHistory(record) {
+      try {
+        const raw = localStorage.getItem(HISTORY_KEY);
+        let list = raw ? JSON.parse(raw) : [];
+        list.unshift(record);
+        if (list.length > MAX_HISTORY) list = list.slice(0, MAX_HISTORY);
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(list));
+        renderHistory(list);
+      } catch {
+        console.warn('保存注册历史失败');
+      }
+    }
+
+    function renderHistory(list) {
+      const el = document.getElementById('history-list');
+      if (!list || list.length === 0) {
+        el.innerHTML = '<div style="text-align:center;padding:24px;color:var(--fg-muted)">暂无历史记录</div>';
+        return;
+      }
+      el.innerHTML = `
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="font-size:11px;color:#9b9b9b">
+            <th style="text-align:left;padding:6px 8px">时间</th>
+            <th style="text-align:center;padding:6px 8px">数量</th>
+            <th style="text-align:center;padding:6px 8px">成功</th>
+            <th style="text-align:center;padding:6px 8px">失败</th>
+            <th style="text-align:right;padding:6px 8px">耗时</th>
+          </tr></thead>
+          <tbody>${list.map(h => `<tr style="border-top:1px solid #f5f5f5">
+            <td style="padding:6px 8px;font-size:11px;color:#666">${formatHistoryTime(h.startTime)}</td>
+            <td style="padding:6px 8px;text-align:center">${h.count}</td>
+            <td style="padding:6px 8px;text-align:center;color:var(--success)">${h.success}</td>
+            <td style="padding:6px 8px;text-align:center;color:${h.failed>0?'var(--error)':'#666'}">${h.failed}</td>
+            <td style="padding:6px 8px;text-align:right;color:#999">${h.duration}s</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      `;
+    }
+
+    function formatHistoryTime(iso) {
+      if (!iso) return '-';
+      const d = new Date(iso);
+      return `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2,'0')}-${d.getDate().toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}:${d.getSeconds().toString().padStart(2,'0')}`;
     }
 
     init();

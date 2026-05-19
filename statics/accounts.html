@@ -16,6 +16,13 @@
         <div class="page-sub">管理 qwen2api 的 Qwen 账户池与运行状态</div>
       </div>
       <div class="page-actions">
+        <div class="dropdown">
+          <button class="btn btn-secondary" id="btn-export" onclick="toggleExportMenu()">导出</button>
+          <div class="dropdown-menu" id="export-menu" style="display:none">
+            <button onclick="exportJSON()">导出 JSON</button>
+            <button onclick="exportTXT()">导出 TXT</button>
+          </div>
+        </div>
         <button class="btn btn-secondary" onclick="showImport()">导入</button>
         <button class="btn btn-primary" onclick="showImport()">+ 新增</button>
       </div>
@@ -72,6 +79,7 @@
           <th>运行状态</th>
           <th>RPM</th>
           <th>失败</th>
+          <th>成功率</th>
           <th>Email</th>
           <th>创建时间</th>
           <th style="text-align:right">操作</th>
@@ -81,16 +89,38 @@
     </div>
 
     <!-- Batch actions (shown when items selected) -->
-    <div id="batch-bar" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#111;color:#fff;padding:8px 16px;border-radius:999px;font-size:12px;font-weight:500;display:none;align-items:center;gap:12px;box-shadow:0 8px 24px rgba(0,0,0,.15)">
+    <div id="batch-bar" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#111;color:#fff;padding:8px 16px;border-radius:999px;font-size:12px;font-weight:500;align-items:center;gap:12px;box-shadow:0 8px 24px rgba(0,0,0,.15)">
       <span id="batch-count">0 个已选</span>
-      <button onclick="batchVerify()" style="color:#fff;font-size:11px;font-weight:600;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.15)">批量验证</button>
-      <button onclick="batchDelete()" style="color:#ff6b6b;font-size:11px;font-weight:600;padding:4px 10px;border-radius:999px;background:rgba(255,100,100,.1)">批量删除</button>
+      <button id="batch-verify-btn" onclick="batchVerify()" style="color:#fff;font-size:11px;font-weight:600;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.15)">批量验证</button>
+      <button id="batch-disable-btn" onclick="batchDisable()" style="color:#fbbf24;font-size:11px;font-weight:600;padding:4px 10px;border-radius:999px;background:rgba(251,191,36,.1)">批量禁用</button>
+      <button id="batch-delete-btn" onclick="batchDelete()" style="color:#ff6b6b;font-size:11px;font-weight:600;padding:4px 10px;border-radius:999px;background:rgba(255,100,100,.1)">批量删除</button>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="edit-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeEditModal()">
+      <div class="modal-card">
+        <div class="modal-title">编辑账户</div>
+        <div class="modal-field">
+          <label>Email</label>
+          <input class="input" id="edit-email" readonly style="background:#fafafa;color:var(--fg-muted)">
+        </div>
+        <div class="modal-field">
+          <label>Token</label>
+          <input class="input" id="edit-token" placeholder="输入新的 Token" oninput="validateEditToken()">
+          <div class="modal-hint" id="edit-hint"></div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeEditModal()">取消</button>
+          <button class="btn btn-primary" id="edit-confirm" onclick="confirmEdit()">确认</button>
+        </div>
+      </div>
     </div>
   </main>
 
   <script src="/statics/js/common.js"></script>
   <script>
     let accounts = [], filter = 'all', page = 1, pageSize = 50;
+    let selectedEmails = new Set();
 
     async function init() {
       if (!await checkAuth()) return;
@@ -148,16 +178,17 @@
 
       const paged = filtered.slice((page-1)*pageSize, page*pageSize);
       document.getElementById('table-body').innerHTML = paged.length === 0
-        ? '<tr><td colspan="8" style="text-align:center;padding:48px;color:var(--fg-muted)">暂无账号</td></tr>'
-        : paged.map(a => `<tr>
-          <td><input type="checkbox" class="row-check" data-email="${a.email}" onchange="updateBatchBar()"></td>
+        ? '<tr><td colspan="9" style="text-align:center;padding:48px;color:var(--fg-muted)">暂无账号</td></tr>'
+        : paged.map(a => `<tr class="${selectedEmails.has(a.email)?'selected':''}">
+          <td><input type="checkbox" class="row-check" data-email="${a.email}" ${selectedEmails.has(a.email)?'checked':''} onchange="updateBatchBar()"></td>
           <td><span class="tok">${maskToken(a.token)}</span> <button class="row-btn" onclick="copyToken('${a.token}')"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></td>
           <td>${statusBadge(a.status)}</td>
           <td style="font-size:12px;color:#666;font-variant-numeric:tabular-nums">${a.rpm_1min || 0}</td>
           <td style="font-size:12px;color:${a.consecutive_failures > 0 ? 'var(--error)' : '#666'};font-variant-numeric:tabular-nums">${a.consecutive_failures || 0}</td>
+          <td style="font-size:12px;color:${a.consecutive_failures > 0 ? 'var(--error)' : 'var(--success)'}">${a.consecutive_failures > 0 ? '0%' : '100%'}</td>
           <td style="font-size:12px;color:#666">${a.email}</td>
           <td style="font-size:11px;color:#999">${formatTime(a.created_at)}</td>
-          <td style="text-align:right"><button class="row-btn" onclick="verify('${a.email}')" title="验证"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.6-4.6"/><path d="M4 4v5h5"/><path d="M4 13a8 8 0 0 0 14.6 4.6"/><path d="M20 20v-5h-5"/></svg></button> <button class="row-btn row-btn-danger" onclick="del('${a.email}')" title="删除"><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></td>
+          <td style="text-align:right"><button class="row-btn" onclick="openEditModal('${a.email}','${(a.token||'').replace(/'/g,"\\'")}')" title="编辑"><svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button> <button class="row-btn" onclick="verify('${a.email}')" title="验证"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.6-4.6"/><path d="M4 4v5h5"/><path d="M4 13a8 8 0 0 0 14.6 4.6"/><path d="M20 20v-5h-5"/></svg></button> <button class="row-btn row-btn-danger" onclick="del('${a.email}')" title="删除"><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></td>
         </tr>`).join('');
     }
 
@@ -208,16 +239,21 @@
     function changePageSize(v) { pageSize = +v; page = 1; render() }
 
     function toggleSelectAll(checked) {
-      document.querySelectorAll('.row-check').forEach(cb => cb.checked = checked);
+      document.querySelectorAll('.row-check').forEach(cb => {
+        cb.checked = checked;
+        if (checked) selectedEmails.add(cb.dataset.email);
+        else selectedEmails.delete(cb.dataset.email);
+      });
       updateBatchBar();
     }
 
     function updateBatchBar() {
-      const checked = document.querySelectorAll('.row-check:checked');
+      selectedEmails.clear();
+      document.querySelectorAll('.row-check:checked').forEach(cb => selectedEmails.add(cb.dataset.email));
       const bar = document.getElementById('batch-bar');
-      if (checked.length > 0) {
+      if (selectedEmails.size > 0) {
         bar.style.display = 'flex';
-        document.getElementById('batch-count').textContent = checked.length + ' 个已选';
+        document.getElementById('batch-count').textContent = selectedEmails.size + ' 个已选';
       } else {
         bar.style.display = 'none';
       }
@@ -229,21 +265,146 @@
 
     async function batchVerify() {
       const emails = getSelectedEmails();
+      setBatchLoading(true);
       for (const email of emails) {
         await fetch('/api/admin/accounts/'+encodeURIComponent(email)+'/verify', { method:'POST', headers:authHeaders() });
       }
       showToast(`已验证 ${emails.length} 个账号`);
+      selectedEmails.clear();
       fetchAccounts();
+      setBatchLoading(false);
     }
 
     async function batchDelete() {
       const emails = getSelectedEmails();
       if (!confirm(`确认删除 ${emails.length} 个账号?`)) return;
+      setBatchLoading(true);
       for (const email of emails) {
         await fetch('/api/admin/accounts/'+encodeURIComponent(email), { method:'DELETE', headers:authHeaders() });
       }
       showToast(`已删除 ${emails.length} 个`);
+      selectedEmails.clear();
       fetchAccounts();
+      setBatchLoading(false);
+    }
+
+    // 导出功能
+    function toggleExportMenu() {
+      const menu = document.getElementById('export-menu');
+      menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+    }
+    // 点击其他地方关闭下拉
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.dropdown')) {
+        const menu = document.getElementById('export-menu');
+        if (menu) menu.style.display = 'none';
+      }
+    });
+
+    function exportJSON() {
+      if (accounts.length === 0) { showToast('无可导出数据'); return; }
+      const data = JSON.stringify(accounts, null, 2);
+      downloadFile(data, `qwen2api-accounts-${dateStr()}.json`, 'application/json');
+      document.getElementById('export-menu').style.display = 'none';
+    }
+
+    function exportTXT() {
+      if (accounts.length === 0) { showToast('无可导出数据'); return; }
+      const data = accounts.map(a => a.token).filter(Boolean).join('\n');
+      downloadFile(data, `qwen2api-accounts-${dateStr()}.txt`, 'text/plain');
+      document.getElementById('export-menu').style.display = 'none';
+    }
+
+    function downloadFile(content, filename, type) {
+      const blob = new Blob([content], { type: type + ';charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a); URL.revokeObjectURL(url);
+    }
+
+    function dateStr() {
+      const d = new Date();
+      return `${d.getFullYear()}${(d.getMonth()+1).toString().padStart(2,'0')}${d.getDate().toString().padStart(2,'0')}`;
+    }
+
+    // 编辑弹窗
+    function openEditModal(email, token) {
+      document.getElementById('edit-email').value = email;
+      document.getElementById('edit-token').value = token;
+      document.getElementById('edit-hint').textContent = '';
+      document.getElementById('edit-confirm').disabled = false;
+      document.getElementById('edit-confirm').textContent = '确认';
+      document.getElementById('edit-modal').style.display = '';
+    }
+
+    function closeEditModal() {
+      document.getElementById('edit-modal').style.display = 'none';
+    }
+
+    function validateEditToken() {
+      const token = document.getElementById('edit-token').value.trim();
+      const hint = document.getElementById('edit-hint');
+      const btn = document.getElementById('edit-confirm');
+      if (!token) {
+        hint.textContent = 'Token 不能为空';
+        btn.disabled = true;
+      } else {
+        hint.textContent = '';
+        btn.disabled = false;
+      }
+    }
+
+    async function confirmEdit() {
+      const email = document.getElementById('edit-email').value;
+      const token = document.getElementById('edit-token').value.trim();
+      if (!token) return;
+      const btn = document.getElementById('edit-confirm');
+      btn.disabled = true;
+      btn.textContent = '保存中...';
+      try {
+        const r = await fetch('/api/admin/accounts/' + encodeURIComponent(email), {
+          method: 'PUT', headers: jsonHeaders(), body: JSON.stringify({ token })
+        });
+        const d = await r.json();
+        if (d.ok) {
+          closeEditModal();
+          showToast('已更新', 3000);
+          fetchAccounts();
+        } else {
+          showToast(d.error || '更新失败', 5000);
+          btn.disabled = false;
+          btn.textContent = '确认';
+        }
+      } catch (e) {
+        showToast('网络错误', 5000);
+        btn.disabled = false;
+        btn.textContent = '确认';
+      }
+    }
+
+    // 批量禁用
+    async function batchDisable() {
+      const emails = getSelectedEmails();
+      if (!confirm(`确认禁用 ${emails.length} 个账号?`)) return;
+      setBatchLoading(true);
+      try {
+        for (const email of emails) {
+          await fetch('/api/admin/accounts/' + encodeURIComponent(email) + '/disable', { method: 'POST', headers: authHeaders() });
+        }
+        showToast(`已禁用 ${emails.length} 个`);
+        selectedEmails.clear();
+        fetchAccounts();
+      } catch {
+        showToast('操作失败', 5000);
+      }
+      setBatchLoading(false);
+    }
+
+    function setBatchLoading(loading) {
+      const btns = document.querySelectorAll('#batch-bar button');
+      btns.forEach(b => { b.disabled = loading; b.style.opacity = loading ? '0.5' : '1'; });
     }
 
     init();

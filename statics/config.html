@@ -16,6 +16,7 @@
         <div class="page-sub">管理系统运行时参数与服务默认行为</div>
       </div>
       <div class="page-actions">
+        <button class="btn btn-secondary" onclick="resetConfig()">重置</button>
         <button class="btn btn-primary" onclick="saveAll()">保存</button>
       </div>
     </div>
@@ -30,6 +31,7 @@
   <script src="/statics/js/common.js"></script>
   <script>
     let settings = {}, keys = [], currentTab = 'system';
+    let configSnapshot = {}; // 初始值快照，用于检测修改
 
     const tabs = [
       { key:'system', label:'系统配置' },
@@ -51,6 +53,7 @@
     async function fetchSettings() {
       const r = await fetch('/api/admin/settings', { headers: authHeaders() });
       settings = await r.json();
+      configSnapshot = JSON.parse(JSON.stringify(settings)); // 深拷贝作为基准
     }
 
     async function fetchKeys() {
@@ -79,39 +82,45 @@
     function renderSystem() {
       return `
         <div style="font-size:12px;color:var(--fg-muted);padding-bottom:8px;border-bottom:1px solid #f5f5f5;margin-bottom:16px">基础访问控制</div>
-        <div class="config-row">
+        <div class="config-row" data-key="app_url">
           <div><div class="config-label">APP 访问地址</div><div class="config-desc">应用对外提供服务的根 URL，格式如 https://your-domain.com</div></div>
-          <input class="config-input" style="width:280px" value="${settings.app_url||''}" placeholder="https://your-domain.com" onchange="settings.app_url=this.value">
+          <input class="config-input" style="width:280px" data-key="app_url" value="${settings.app_url||''}" placeholder="https://your-domain.com" oninput="onConfigChange(this,'app_url')">
         </div>
-        <div class="config-row">
+        <div class="config-row" data-key="admin_key">
           <div><div class="config-label">APP 访问密码</div><div class="config-desc">管理后台鉴权密码。修改后已有 Session 将立即失效，需重新登录。</div></div>
-          <input type="password" class="config-input" style="width:200px" value="${settings.admin_key||''}" onchange="settings.admin_key=this.value">
+          <div class="pwd-wrap">
+            <input type="password" class="config-input" style="width:200px;padding-right:32px" data-key="admin_key" value="${settings.admin_key||''}" oninput="onConfigChange(this,'admin_key')">
+            <button class="pwd-toggle" onclick="togglePwd(this)" type="button">
+              <svg class="eye-open" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg class="eye-slash" style="display:none" viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            </button>
+          </div>
         </div>
-        <div class="config-row">
+        <div class="config-row" data-key="default_stream">
           <div><div class="config-label">默认流式回复</div><div class="config-desc">客户端未传 stream 字段时的默认行为</div></div>
-          <div class="toggle ${settings.default_stream!==false?'on':''}" onclick="this.classList.toggle('on');settings.default_stream=this.classList.contains('on')"></div>
+          <div class="toggle ${settings.default_stream!==false?'on':''}" onclick="this.classList.toggle('on');settings.default_stream=this.classList.contains('on');markModified('default_stream')"></div>
         </div>
-        <div class="config-row">
+        <div class="config-row" data-key="engine_mode">
           <div><div class="config-label">驱动引擎</div><div class="config-desc">httpx 快速直连 / browser 浏览器指纹 / hybrid 混合</div></div>
-          <select class="config-select" onchange="settings.engine_mode=this.value">
+          <select class="config-select" data-key="engine_mode" onchange="settings.engine_mode=this.value;markModified('engine_mode')">
             <option value="httpx" ${settings.engine_mode==='httpx'?'selected':''}>httpx</option>
             <option value="browser" ${settings.engine_mode==='browser'?'selected':''}>browser</option>
             <option value="hybrid" ${settings.engine_mode==='hybrid'?'selected':''}>hybrid</option>
           </select>
         </div>
-        <div class="config-row">
+        <div class="config-row" data-key="max_inflight_per_account">
           <div><div class="config-label">单账号并发</div><div class="config-desc">每个账号同时处理的最大请求数，1=最安全</div></div>
-          <input type="number" class="config-input" value="${settings.max_inflight_per_account||1}" min="1" max="10" onchange="settings.max_inflight_per_account=+this.value">
+          <input type="number" class="config-input" data-key="max_inflight_per_account" value="${settings.max_inflight_per_account||1}" min="1" max="10" oninput="onConfigChange(this,'max_inflight_per_account',true)">
         </div>
 
         <div style="font-size:12px;color:var(--fg-muted);padding-bottom:8px;border-bottom:1px solid #f5f5f5;margin:24px 0 16px">自动补号</div>
-        <div class="config-row">
+        <div class="config-row" data-key="auto_replenish">
           <div><div class="config-label">启用自动补号</div><div class="config-desc">账号耗尽时自动触发注册补充</div></div>
-          <div class="toggle ${settings.auto_replenish?'on':''}" onclick="this.classList.toggle('on');settings.auto_replenish=this.classList.contains('on');document.getElementById('replenish-target').style.display=settings.auto_replenish?'':'none'"></div>
+          <div class="toggle ${settings.auto_replenish?'on':''}" onclick="this.classList.toggle('on');settings.auto_replenish=this.classList.contains('on');document.getElementById('replenish-target').style.display=settings.auto_replenish?'':'none';markModified('auto_replenish')"></div>
         </div>
-        <div class="config-row" id="replenish-target" style="${settings.auto_replenish?'':'display:none'}">
+        <div class="config-row" id="replenish-target" data-key="replenish_target" style="${settings.auto_replenish?'':'display:none'}">
           <div><div class="config-label">目标账号数</div><div class="config-desc">池中账号低于此数时触发补号</div></div>
-          <input type="number" class="config-input" value="${settings.replenish_target||30}" onchange="settings.replenish_target=+this.value">
+          <input type="number" class="config-input" data-key="replenish_target" value="${settings.replenish_target||30}" oninput="onConfigChange(this,'replenish_target',true)">
         </div>
       `;
     }
@@ -150,22 +159,28 @@
     function renderProxy() {
       return `
         <div style="font-size:12px;color:var(--fg-muted);padding-bottom:8px;border-bottom:1px solid #f5f5f5;margin-bottom:16px">代理设置</div>
-        <div class="config-row">
+        <div class="config-row" data-key="proxy_enabled">
           <div><div class="config-label">启用代理</div><div class="config-desc">注册时使用代理绕过 WAF 限制</div></div>
-          <div class="toggle ${settings.proxy_enabled?'on':''}" onclick="this.classList.toggle('on');settings.proxy_enabled=this.classList.contains('on');document.getElementById('proxy-fields').style.display=settings.proxy_enabled?'':'none'"></div>
+          <div class="toggle ${settings.proxy_enabled?'on':''}" onclick="this.classList.toggle('on');settings.proxy_enabled=this.classList.contains('on');document.getElementById('proxy-fields').style.display=settings.proxy_enabled?'':'none';markModified('proxy_enabled')"></div>
         </div>
         <div id="proxy-fields" style="${settings.proxy_enabled?'':'display:none'}">
-          <div class="config-row">
+          <div class="config-row" data-key="proxy_url">
             <div><div class="config-label">代理地址</div><div class="config-desc">格式: http://host:port 或 socks5://host:port</div></div>
-            <input class="config-input" style="width:280px;font-family:var(--font-mono)" value="${settings.proxy_url||''}" placeholder="http://host:port" onchange="settings.proxy_url=this.value">
+            <input class="config-input" style="width:280px;font-family:var(--font-mono)" data-key="proxy_url" value="${settings.proxy_url||''}" placeholder="http://host:port" oninput="onConfigChange(this,'proxy_url')">
           </div>
-          <div class="config-row">
+          <div class="config-row" data-key="proxy_username">
             <div><div class="config-label">用户名</div><div class="config-desc">代理认证用户名（可选）</div></div>
-            <input class="config-input" value="${settings.proxy_username||''}" onchange="settings.proxy_username=this.value">
+            <input class="config-input" data-key="proxy_username" value="${settings.proxy_username||''}" oninput="onConfigChange(this,'proxy_username')">
           </div>
-          <div class="config-row">
+          <div class="config-row" data-key="proxy_password">
             <div><div class="config-label">密码</div><div class="config-desc">代理认证密码（可选）</div></div>
-            <input type="password" class="config-input" value="${settings.proxy_password||''}" onchange="settings.proxy_password=this.value">
+            <div class="pwd-wrap">
+              <input type="password" class="config-input" style="padding-right:32px" data-key="proxy_password" value="${settings.proxy_password||''}" oninput="onConfigChange(this,'proxy_password')">
+              <button class="pwd-toggle" onclick="togglePwd(this)" type="button">
+                <svg class="eye-open" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg class="eye-slash" style="display:none" viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+              </button>
+            </div>
           </div>
         </div>
       `;
@@ -220,7 +235,66 @@
         catch { showToast('模型映射 JSON 格式错误'); return }
       }
       await fetch('/api/admin/settings', { method:'PUT', headers:jsonHeaders(), body:JSON.stringify(payload) });
+      configSnapshot = JSON.parse(JSON.stringify(settings));
+      clearAllModified();
       showToast('已保存');
+    }
+
+    // 重置配置
+    async function resetConfig() {
+      if (!confirm('确认将所有配置恢复为默认值？此操作不可撤销。')) return;
+      try {
+        const r = await fetch('/api/admin/settings/defaults', { headers: authHeaders() });
+        if (!r.ok) { showToast('获取默认配置失败', 5000); return; }
+        const defaults = await r.json();
+        settings = defaults;
+        configSnapshot = JSON.parse(JSON.stringify(defaults));
+        // 将默认值写入后端
+        await fetch('/api/admin/settings', { method:'PUT', headers:jsonHeaders(), body:JSON.stringify(defaults) });
+        renderContent();
+        showToast('已恢复默认');
+      } catch {
+        showToast('重置失败', 5000);
+      }
+    }
+
+    // 密码显示/隐藏切换
+    function togglePwd(btn) {
+      const wrap = btn.closest('.pwd-wrap');
+      const input = wrap.querySelector('input');
+      const eyeOpen = btn.querySelector('.eye-open');
+      const eyeSlash = btn.querySelector('.eye-slash');
+      if (input.type === 'password') {
+        input.type = 'text';
+        eyeOpen.style.display = 'none';
+        eyeSlash.style.display = '';
+      } else {
+        input.type = 'password';
+        eyeOpen.style.display = '';
+        eyeSlash.style.display = 'none';
+      }
+    }
+
+    // 配置修改检测
+    function onConfigChange(el, key, isNumber) {
+      settings[key] = isNumber ? +el.value : el.value;
+      markModified(key);
+    }
+
+    function markModified(key) {
+      const row = document.querySelector(`.config-row[data-key="${key}"]`);
+      if (!row) return;
+      const current = settings[key];
+      const original = configSnapshot[key];
+      if (String(current) !== String(original)) {
+        row.classList.add('modified');
+      } else {
+        row.classList.remove('modified');
+      }
+    }
+
+    function clearAllModified() {
+      document.querySelectorAll('.config-row.modified').forEach(r => r.classList.remove('modified'));
     }
 
     // Key management

@@ -165,6 +165,27 @@ async def verify_account(email: str, request: Request, _=Depends(_require_admin)
     return {"valid": valid, "email": email, "status": acc.status}
 
 
+@router.put("/accounts/{email}")
+async def update_account(email: str, request: Request, _=Depends(_require_admin)):
+    """更新账户的 Token"""
+    pool = request.app.state.account_pool
+    acc = pool.get_account_by_email(email)
+    if not acc:
+        raise HTTPException(404, "Account not found")
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON")
+    new_token = body.get("token", "").strip()
+    if not new_token:
+        return JSONResponse({"ok": False, "error": "Token cannot be empty"}, status_code=400)
+    acc.token = new_token
+    acc.status = "VALID"
+    acc.consecutive_failures = 0
+    await pool.save()
+    return {"ok": True, "email": email}
+
+
 @router.post("/accounts/{email}/activate")
 async def activate_account(email: str, request: Request, _=Depends(_require_admin)):
     pool = request.app.state.account_pool
@@ -176,6 +197,18 @@ async def activate_account(email: str, request: Request, _=Depends(_require_admi
         asyncio.create_task(client.auth_resolver.auto_heal_account(acc))
         return {"ok": True, "pending": True, "message": "激活任务已提交"}
     return {"ok": False, "error": "AuthResolver not available"}
+
+
+@router.post("/accounts/{email}/disable")
+async def disable_account(email: str, request: Request, _=Depends(_require_admin)):
+    """禁用账户"""
+    pool = request.app.state.account_pool
+    acc = pool.get_account_by_email(email)
+    if not acc:
+        raise HTTPException(404, "Account not found")
+    acc.status = "DISABLED"
+    await pool.save()
+    return {"ok": True, "email": email}
 
 
 @router.get("/accounts/raw")
