@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     BROWSER_POOL_SIZE: int = int(os.getenv("BROWSER_POOL_SIZE", 2))
     MAX_INFLIGHT_PER_ACCOUNT: int = int(os.getenv("MAX_INFLIGHT", 1))
     STREAM_KEEPALIVE_INTERVAL: int = int(os.getenv("STREAM_KEEPALIVE_INTERVAL", 5))
+    # 流式输出打字机效果：每批输出的字符数和间隔（毫秒）
+    # 设为 0 则直接透传上游原始速度（无打字机效果）
+    STREAM_MIN_CHUNK_SIZE: int = int(os.getenv("STREAM_MIN_CHUNK_SIZE", 1))  # 每次输出最少字符数
+    STREAM_MAX_CHUNK_SIZE: int = int(os.getenv("STREAM_MAX_CHUNK_SIZE", 4))  # 每次输出最多字符数
+    STREAM_CHUNK_DELAY_MS: int = int(os.getenv("STREAM_CHUNK_DELAY_MS", 30))  # 每批之间延迟(ms)
     # 默认流式回复：True=默认流式，False=看客户端 stream 字段
     DEFAULT_STREAM: bool = os.getenv("DEFAULT_STREAM", "true").lower() in ("1", "true", "yes", "on")
 

@@ -306,13 +306,25 @@ async def _stream_no_tools(
                     streamed_len += len(delta_reasoning)
                     continue
 
-                # 正文内容
+                # 正文内容 — 打字机效果：将上游快速到达的 chunks 拆分为小批量逐字输出
                 if (phase == "answer" or content) and content:
                     if not sent_role:
                         yield f"data: {json.dumps({'id': completion_id, 'object': 'chat.completion.chunk', 'created': created, 'model': model_name, 'choices': [{'index': 0, 'delta': {'role': 'assistant'}, 'finish_reason': None}]}, ensure_ascii=False)}\n\n"
                         sent_role = True
                     streamed_len += len(content)
-                    yield f"data: {json.dumps({'id': completion_id, 'object': 'chat.completion.chunk', 'created': created, 'model': model_name, 'choices': [{'index': 0, 'delta': {'content': content}, 'finish_reason': None}]}, ensure_ascii=False)}\n\n"
+                    # 打字机模式：逐字符/小批量输出
+                    chunk_delay = settings.STREAM_CHUNK_DELAY_MS / 1000.0
+                    max_size = settings.STREAM_MAX_CHUNK_SIZE
+                    if chunk_delay > 0 and max_size > 0 and len(content) > max_size:
+                        pos = 0
+                        while pos < len(content):
+                            batch = content[pos:pos + max_size]
+                            pos += max_size
+                            yield f"data: {json.dumps({'id': completion_id, 'object': 'chat.completion.chunk', 'created': created, 'model': model_name, 'choices': [{'index': 0, 'delta': {'content': batch}, 'finish_reason': None}]}, ensure_ascii=False)}\n\n"
+                            if pos < len(content):
+                                await aio.sleep(chunk_delay)
+                    else:
+                        yield f"data: {json.dumps({'id': completion_id, 'object': 'chat.completion.chunk', 'created': created, 'model': model_name, 'choices': [{'index': 0, 'delta': {'content': content}, 'finish_reason': None}]}, ensure_ascii=False)}\n\n"
 
             # 空响应重试
             if streamed_len == 0 and attempt < min(settings.EMPTY_RESPONSE_RETRIES, max_attempts - 1):
