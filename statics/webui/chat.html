@@ -331,7 +331,6 @@
       // 内容区域
       const contentEl = document.createElement('div');
       contentEl.className = 'webui-content-stream';
-      contentEl.innerHTML = '<span class="typing-dots"><span></span><span></span><span></span></span>';
       bubble.appendChild(thinkWrap);
       bubble.appendChild(contentEl);
       msgDiv.appendChild(bubble);
@@ -356,41 +355,6 @@
         const decoder = new TextDecoder();
         let buf = '', content = '', reasoning = '';
 
-        // 打字机队列
-        let typeQueue = [];
-        let typeRunning = false;
-        let displayedThink = '';
-        let displayedContent = '';
-
-        function runTypewriter() {
-          typeRunning = true;
-          function tick() {
-            if (typeQueue.length === 0) { typeRunning = false; return; }
-            const item = typeQueue[0];
-            if (item.text.length === 0) { typeQueue.shift(); tick(); return; }
-            const chars = item.text.slice(0, Math.ceil(Math.random() * 2 + 1));
-            item.text = item.text.slice(chars.length);
-            if (item.text.length === 0) typeQueue.shift();
-            if (item.target === 'think') {
-              displayedThink += chars;
-              thinkBody.textContent = displayedThink;
-            } else {
-              if (displayedContent === '' && contentEl.querySelector('.typing-dots')) contentEl.innerHTML = '';
-              displayedContent += chars;
-              contentEl.textContent = displayedContent;
-            }
-            thread.scrollTop = thread.scrollHeight;
-            requestAnimationFrame(tick);
-          }
-          tick();
-        }
-
-        function waitTypewriterDone() {
-          return new Promise(resolve => {
-            (function check() { if (!typeRunning && typeQueue.length === 0) resolve(); else requestAnimationFrame(check); })();
-          });
-        }
-
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
@@ -406,20 +370,17 @@
               if (delta.reasoning_content) {
                 reasoning += delta.reasoning_content;
                 thinkWrap.style.display = '';
-                // 思考内容也用打字机
-                typeQueue.push({ target: 'think', text: delta.reasoning_content });
-                if (!typeRunning) runTypewriter();
+                thinkBody.textContent = reasoning;
+                thread.scrollTop = thread.scrollHeight;
               }
               if (delta.content) {
                 content += delta.content;
-                typeQueue.push({ target: 'content', text: delta.content });
-                if (!typeRunning) runTypewriter();
+                contentEl.textContent = content;
+                thread.scrollTop = thread.scrollHeight;
               }
             } catch {}
           }
         }
-        // 等打字机队列清空
-        await waitTypewriterDone();
         // 流结束后，用 markdown 渲染最终内容
         messages[messages.length - 1].reasoning = reasoning;
         messages[messages.length - 1].content = content;
