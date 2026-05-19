@@ -137,7 +137,7 @@ async def chat_completions(request: Request):
 
     model_name = req_data.get("model", "gpt-3.5-turbo")
     qwen_model = resolve_model(model_name)
-    stream = req_data.get("stream", False)
+    stream = req_data.get("stream", settings.DEFAULT_STREAM)
 
     # 思考模式
     req_thinking = resolve_model_thinking(model_name)

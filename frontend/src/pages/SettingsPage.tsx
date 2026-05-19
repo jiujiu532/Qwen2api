@@ -42,17 +42,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const inputCls = "w-full h-12 bg-muted/20 border border-border/40 rounded-xl px-4 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all"
 const btnIndigo = "w-full h-11 bg-indigo-500 text-white font-semibold rounded-xl text-sm shadow-lg shadow-indigo-500/20 hover:opacity-90 transition-all"
 
-// ── 实际支持的协议端点 ─────────────────────────────────────
-const API_ENDPOINTS = [
-  { badge: "OpenAI", color: "bg-indigo-500", path: "/v1/chat/completions", desc: "对话补全、工具调用、流式" },
-  { badge: "OpenAI", color: "bg-indigo-500", path: "/v1/responses", desc: "Responses API 新格式" },
-  { badge: "OpenAI", color: "bg-indigo-500", path: "/v1/images/generations", desc: "示意图生成" },
-  { badge: "OpenAI", color: "bg-indigo-500", path: "/v1/embeddings", desc: "Embedding 向量" },
-  { badge: "OpenAI", color: "bg-indigo-500", path: "/v1/models", desc: "模型列表" },
-  { badge: "Claude", color: "bg-orange-500", path: "/v1/messages", desc: "Anthropic 兼容层" },
-  { badge: "Gemini", color: "bg-emerald-500", path: "/v1beta/models/{model}:generateContent", desc: "Google Gemini 透传" },
-]
-
 export default function SettingsPage() {
   const navigate = useNavigate()
   const [sessionKey, setSessionKey] = useState("")
@@ -72,6 +61,7 @@ export default function SettingsPage() {
   const [proxyTestResult, setProxyTestResult] = useState<{
     ok: boolean; direct_ip: string; proxy_ip: string; error?: string;
   } | null>(null)
+  const [defaultStream, setDefaultStream] = useState(true)
 
   const fetchSettings = () => {
     fetch(`${API_BASE}/api/admin/settings`, { headers: getAuthHeader() })
@@ -88,6 +78,7 @@ export default function SettingsPage() {
         setProxyUrl(d.proxy_url || "")
         setProxyUsername(d.proxy_username || "")
         setProxyPassword(d.proxy_password || "")
+        setDefaultStream(d.default_stream !== false)
       })
       .catch(() => toast.error("配置获取失败，请检查密钥"))
   }
@@ -114,7 +105,6 @@ export default function SettingsPage() {
   }
 
   const isMoe = mailTab === 'moemail'
-  const backendUrl = API_BASE || window.location.origin
 
   return (
     <div className="animate-fade-in-up max-w-[1400px] mx-auto pb-20 space-y-10">
@@ -386,27 +376,31 @@ export default function SettingsPage() {
         {/* ══ 右列 ═══════════════════════════════════════ */}
         <div className="xl:col-span-5 space-y-6 xl:sticky xl:top-10">
 
-          {/* 节点集成端点 — 真实协议路径表 */}
-          <Card title="节点集成端点" icon={Server}>
-            <div className="p-3 rounded-xl bg-muted/30 border border-border/40 flex items-center gap-2">
-              <code className="text-indigo-500 font-mono text-sm font-bold flex-1 break-all">{backendUrl}</code>
-              <button onClick={() => { navigator.clipboard.writeText(backendUrl); toast.success("已复制") }}
-                className="shrink-0 text-xs text-muted-foreground/50 hover:text-indigo-500 transition-colors">📋</button>
-            </div>
-
-            <div className="space-y-1">
-              <p className="text-[10px] font-black text-muted-foreground mb-2">支持的协议与路径</p>
-              {API_ENDPOINTS.map(e => (
-                <div
-                  key={e.path}
-                  title={`点击复制: ${backendUrl}${e.path}`}
-                  onClick={() => { navigator.clipboard.writeText(`${backendUrl}${e.path}`); toast.success("已复制完整地址") }}
-                  className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-muted/20 border border-border/30 hover:bg-indigo-500/5 hover:border-indigo-500/20 transition-all group cursor-pointer">
-                  <span className={`shrink-0 text-[9px] font-black text-white px-1.5 py-0.5 rounded-md ${e.color}`}>{e.badge}</span>
-                  <code className="text-[11px] font-mono text-foreground/80 flex-1 truncate">{e.path}</code>
-                  <span className="text-[10px] text-muted-foreground shrink-0 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">{e.desc}</span>
+          {/* 默认流式回复开关 */}
+          <Card title="默认流式回复" icon={Server}>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <span className="text-xs font-black text-foreground">默认启用流式输出</span>
+                  <p className="text-[10px] text-muted-foreground leading-relaxed">
+                    开启后，客户端未传 stream 字段时默认使用流式回复。关闭则看客户端请求中的 stream 字段决定。
+                  </p>
                 </div>
-              ))}
+                <button
+                  onClick={() => {
+                    const next = !defaultStream
+                    setDefaultStream(next)
+                    saveSetting("default_stream", next, "默认流式")
+                  }}
+                  className={`relative w-12 h-6 rounded-full transition-colors ${defaultStream ? 'bg-indigo-500' : 'bg-muted/50 border border-border/40'}`}>
+                  <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${defaultStream ? 'translate-x-6' : 'translate-x-0.5'}`} />
+                </button>
+              </div>
+              <div className="text-[10px] text-muted-foreground/70 bg-muted/20 rounded-lg p-2">
+                {defaultStream
+                  ? "当前：客户端不传 stream 字段时，默认流式回复（SSE）"
+                  : "当前：客户端不传 stream 字段时，默认非流式回复（完整 JSON）"}
+              </div>
             </div>
           </Card>
 

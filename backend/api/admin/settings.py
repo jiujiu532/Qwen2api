@@ -39,6 +39,7 @@ async def get_settings(_=Depends(_require_admin)):
         "proxy_url": getattr(settings, "PROXY_URL", ""),
         "proxy_username": getattr(settings, "PROXY_USERNAME", ""),
         "proxy_password": getattr(settings, "PROXY_PASSWORD", ""),
+        "default_stream": getattr(settings, "DEFAULT_STREAM", True),
     }
 
 
@@ -96,6 +97,8 @@ async def update_settings(request: Request, _=Depends(_require_admin)):
         settings.PROXY_USERNAME = str(body["proxy_username"]).strip()
     if "proxy_password" in body:
         settings.PROXY_PASSWORD = str(body["proxy_password"]).strip()
+    if "default_stream" in body:
+        settings.DEFAULT_STREAM = bool(body["default_stream"])
 
     save_runtime_settings()
     return {"ok": True}
