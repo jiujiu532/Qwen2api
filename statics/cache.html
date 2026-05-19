@@ -73,7 +73,7 @@
       document.getElementById('cache-stats').innerHTML = `
         <div class="stat-cell"><div class="stat-top"><span class="stat-label">图片数量</span></div><div class="stat-num" style="color:var(--info)">${img.count || 0}</div></div>
         <div class="stat-cell"><div class="stat-top"><span class="stat-label">缓存大小</span></div><div class="stat-num">${img.size_mb || 0} MB</div><div style="font-size:11px;color:#999;margin-top:4px">上限 ${img.limit_mb || 0} MB (${img.usage_percent || 0}%)</div></div>
-        <div class="stat-cell"><div class="stat-top"><span class="stat-label">使用率</span></div><div style="margin-top:auto"><div style="height:6px;border-radius:999px;background:#f0f0f0;overflow:hidden"><div style="height:100%;width:${Math.min(img.usage_percent||0,100)}%;border-radius:999px;background:${(img.usage_percent||0)>90?'var(--error)':'var(--info)'}"></div></div></div></div>
+        <div class="stat-cell"><div class="stat-top"><span class="stat-label">使用率</span></div><div class="stat-num" style="color:${(img.usage_percent||0)>90?'var(--error)':'var(--info)'}">${img.usage_percent || 0}%</div><div style="margin-top:8px"><div style="height:6px;border-radius:999px;background:#f0f0f0;overflow:hidden"><div style="height:100%;width:${Math.min(img.usage_percent||0,100)}%;border-radius:999px;background:${(img.usage_percent||0)>90?'var(--error)':'var(--info)'}"></div></div></div></div>
       `;
     }
 
