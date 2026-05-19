@@ -187,9 +187,9 @@ BUILTIN_MODELS = [
     "qwen3.6-27b",
     "qwen3.6-27b-thinking",
     "qwen3.6-27b-nothinking",
-    # Qwen 3.7 系列（仅支持思考模式，真实 ID 是 invite-beta 格式）
-    "qwen3.7-max-preview",
-    "qwen3.7-plus-preview",
+    # Qwen 3.7 系列（仅支持思考模式）
+    "qwen3.7-max-preview-thinking",
+    "qwen3.7-plus-preview-thinking",
 ]
 
 # 默认模型（未知模型名的 fallback）
@@ -199,53 +199,8 @@ DEFAULT_MODEL = "qwen3.6-plus"
 NOTHINKING_SUFFIX = "-nothinking"
 THINKING_SUFFIX = "-thinking"
 
-# ── 默认别名映射（常见 OpenAI/Claude/Gemini 模型名 -> Qwen 模型）──────────────
-DEFAULT_MODEL_ALIASES: dict[str, str] = {
-    # OpenAI 系列
-    "gpt-4o": "qwen3.6-plus",
-    "gpt-4o-mini": "qwen3.6-27b",
-    "gpt-4-turbo": "qwen3.6-plus",
-    "gpt-4": "qwen3.6-plus",
-    "gpt-4.1": "qwen3.6-plus",
-    "gpt-4.1-mini": "qwen3.6-27b",
-    "gpt-4.1-nano": "qwen3.6-27b",
-    "gpt-3.5-turbo": "qwen3.6-27b",
-    "gpt-3.5": "qwen3.6-27b",
-    "o1": "qwen3.6-max-preview",
-    "o1-mini": "qwen3.6-plus",
-    "o1-preview": "qwen3.6-max-preview",
-    "o3": "qwen3.6-max-preview",
-    "o3-mini": "qwen3.6-plus",
-    "o4-mini": "qwen3.6-plus",
-    # Claude 系列
-    "claude-3-5-sonnet-latest": "qwen3.6-max-preview",
-    "claude-3-5-sonnet-20241022": "qwen3.6-max-preview",
-    "claude-3-5-haiku-latest": "qwen3.6-plus",
-    "claude-3-opus-latest": "qwen3.6-max-preview",
-    "claude-3-sonnet-20240229": "qwen3.6-plus",
-    "claude-3-haiku-20240307": "qwen3.6-27b",
-    "claude-sonnet-4-20250514": "qwen3.6-max-preview",
-    "claude-haiku-4-20250514": "qwen3.6-plus",
-    # Gemini 系列
-    "gemini-2.5-pro": "qwen3.6-max-preview",
-    "gemini-2.5-flash": "qwen3.6-plus",
-    "gemini-2.0-flash": "qwen3.6-plus",
-    "gemini-1.5-pro": "qwen3.6-plus",
-    "gemini-1.5-flash": "qwen3.6-27b",
-    "gemini-pro": "qwen3.6-plus",
-    # DeepSeek 系列
-    "deepseek-chat": "qwen3.6-plus",
-    "deepseek-reasoner": "qwen3.6-max-preview",
-    "deepseek-coder": "qwen3.6-plus",
-    # Qwen 旧名/别名
-    "qwen-plus": "qwen3.6-plus",
-    "qwen-max": "qwen3.6-max-preview",
-    "qwen-turbo": "qwen3.6-27b",
-    "qwen-long": "qwen3.6-plus",
-    "qwen-coder-plus": "qwen3.6-plus",
-    "qwq-plus": "qwen3.6-max-preview",
-    "qwq-max": "qwen3.6-max-preview",
-}
+# ── 默认别名映射（已禁用，不再做模型映射）──────────────
+DEFAULT_MODEL_ALIASES: dict[str, str] = {}
 
 # 用户自定义映射（管理后台配置，优先级最高）
 MODEL_MAP: dict = {}
@@ -271,26 +226,23 @@ def resolve_model(name: str) -> str:
         if resolved.endswith(THINKING_SUFFIX):
             return resolved[:-len(THINKING_SUFFIX)]
         return resolved
-    # 2. 剥离后缀再查
+    # 2. 剥离后缀
     base_name = name
     if name.endswith(NOTHINKING_SUFFIX):
         base_name = name[:-len(NOTHINKING_SUFFIX)]
     elif name.endswith(THINKING_SUFFIX):
         base_name = name[:-len(THINKING_SUFFIX)]
-    # 3. 默认别名映射
-    if base_name in DEFAULT_MODEL_ALIASES:
-        return DEFAULT_MODEL_ALIASES[base_name]
-    # 4. 如果本身就是内置真实模型名
-    real_models = {"qwen3.6-plus", "qwen3.6-max-preview", "qwen3.6-27b", "qwen3.7-max-preview", "qwen3.7-plus-preview"}
+    # 3. 如果本身就是内置真实模型名
+    real_models = {"qwen3.6-plus", "qwen3.6-max-preview", "qwen3.6-27b", "qwen3.7-max-preview-thinking", "qwen3.7-plus-preview-thinking"}
     if base_name in real_models:
         # Qwen 3.7 系列的真实 ID 是 invite-beta 格式
         qwen37_map = {
-            "qwen3.7-max-preview": "qwen-latest-series-invite-beta-v24",
-            "qwen3.7-plus-preview": "qwen-latest-series-invite-beta-v16",
+            "qwen3.7-max-preview-thinking": "qwen-latest-series-invite-beta-v24",
+            "qwen3.7-plus-preview-thinking": "qwen-latest-series-invite-beta-v16",
         }
         return qwen37_map.get(base_name, base_name)
-    # 5. 都不认识，用默认模型
-    return DEFAULT_MODEL
+    # 4. 不认识的模型名直接透传（不做映射）
+    return base_name
 
 
 def resolve_model_thinking(name: str) -> bool | None:
@@ -318,9 +270,8 @@ def resolve_model_thinking(name: str) -> bool | None:
 
 
 def get_all_available_models() -> list[str]:
-    """获取所有可用模型名（内置 + 默认别名 + 用户自定义）。"""
+    """获取所有可用模型名（内置模型 + 用户自定义映射）。"""
     all_names = set(BUILTIN_MODELS)
-    all_names.update(DEFAULT_MODEL_ALIASES.keys())
     all_names.update(MODEL_MAP.keys())
     all_names.update(MODEL_MAP.values())
     return sorted(all_names)
