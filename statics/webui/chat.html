@@ -145,7 +145,7 @@
     let sessions = JSON.parse(localStorage.getItem('qwen2api_sessions') || '[]');
     let currentSessionId = null;
     let messages = [];
-    let isStreaming = false;
+    let pendingRequests = new Set(); // 正在进行的请求 sessionId 集合
 
     const BUILTIN_MODELS = [
       'qwen3.6-plus','qwen3.6-plus-thinking','qwen3.6-plus-nothinking',
@@ -185,8 +185,7 @@
       currentSessionId = id;
       const s = sessions.find(x => x.id === id);
       messages = s ? [...s.messages] : [];
-      // 切换会话时重置流式状态
-      isStreaming = false;
+      // 切换会话时恢复发送按钮（不中断后台请求）
       document.getElementById('send-btn').disabled = false;
       renderSessions();
       renderThread();
@@ -291,7 +290,7 @@
     async function sendMessage() {
       const ta = document.getElementById('prompt');
       const text = ta.value.trim();
-      if (!text || isStreaming) return;
+      if (!text) return;
       if (!currentSessionId) {
         const id = 'chat_' + Date.now();
         sessions.unshift({ id, title: '新对话', messages: [], created: Date.now() });
@@ -300,18 +299,17 @@
         renderSessions();
       }
 
+      const targetSessionId = currentSessionId;
       messages.push({ role: 'user', content: text });
       ta.value = ''; ta.style.height = 'auto';
       renderThread(); saveCurrentSession();
 
-      isStreaming = true;
+      // 禁用发送按钮（当前会话正在请求）
       document.getElementById('send-btn').disabled = true;
+      pendingRequests.add(targetSessionId);
       const model = document.getElementById('model-select').value;
       const key = getKey();
-      if (!key) {
-        location.href = '/webui/login';
-        return;
-      }
+      if (!key) { location.href = '/webui/login'; return; }
 
       messages.push({ role: 'assistant', content: '', reasoning: '' });
       // 创建流式 DOM 结构
@@ -335,21 +333,25 @@
       const thread = document.getElementById('thread');
       thread.scrollTop = thread.scrollHeight;
 
+      // 保存当前 messages 的引用索引
+      const assistantIdx = messages.length - 1;
+      const requestMessages = messages.slice(0, -1); // 不含空 assistant
+
       try {
         const resp = await fetch('/v1/chat/completions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
-          body: JSON.stringify({ model, messages: messages.slice(0, -1), stream: true })
+          body: JSON.stringify({ model, messages: requestMessages, stream: true })
         });
         if (!resp.ok) {
           const errText = await resp.text();
-          messages[messages.length - 1].content = '错误 (' + resp.status + '): ' + errText.slice(0, 200);
-          renderThread(); saveCurrentSession();
-          isStreaming = false; document.getElementById('send-btn').disabled = false;
+          messages[assistantIdx].content = '错误 (' + resp.status + '): ' + errText.slice(0, 200);
+          if (currentSessionId === targetSessionId) renderThread();
+          finishRequest(targetSessionId);
           return;
         }
 
-        // 第一步：收集全部 SSE 内容
+        // 收集全部内容
         const reader = resp.body.getReader();
         const decoder = new TextDecoder();
         let buf = '', content = '', reasoning = '';
@@ -372,32 +374,44 @@
           }
         }
 
-        // 第二步：打字机输出思考过程
-        if (reasoning) {
-          thinkWrap.style.display = '';
+        // 更新 messages
+        messages[assistantIdx].reasoning = reasoning;
+        messages[assistantIdx].content = content;
+
+        // 只有当前显示的是这个会话时才做打字机动画
+        if (currentSessionId === targetSessionId) {
+          if (reasoning) {
+            thinkWrap.style.display = '';
+            contentEl.innerHTML = '';
+            await typewrite(thinkBody, reasoning, 12);
+          }
           contentEl.innerHTML = '';
-          await typewrite(thinkBody, reasoning, 12);
+          if (content) {
+            await typewrite(contentEl, content, 15);
+            contentEl.innerHTML = renderMd(content);
+          }
         }
-
-        // 第三步：打字机输出回复内容
-        contentEl.innerHTML = '';
-        if (content) {
-          await typewrite(contentEl, content, 15);
-          // 打字完成后 markdown 渲染
-          contentEl.innerHTML = renderMd(content);
-        }
-
-        messages[messages.length - 1].reasoning = reasoning;
-        messages[messages.length - 1].content = content;
       } catch (e) {
-        messages[messages.length - 1].content = '网络错误: ' + e.message;
-        contentEl.textContent = '网络错误: ' + e.message;
+        messages[assistantIdx].content = '网络错误: ' + e.message;
+        if (currentSessionId === targetSessionId) {
+          contentEl.textContent = '网络错误: ' + e.message;
+        }
       }
-      saveCurrentSession();
-      isStreaming = false;
-      document.getElementById('send-btn').disabled = false;
+
+      // 保存并恢复状态
+      const s = sessions.find(x => x.id === targetSessionId);
+      if (s) { s.messages = [...messages]; const first = messages.find(m => m.role === 'user'); if (first && !s.titleLocked) s.title = first.content.slice(0, 28); saveSessions(); }
+      finishRequest(targetSessionId);
     }
 
+    function finishRequest(sessionId) {
+      pendingRequests.delete(sessionId);
+      // 如果当前会话就是完成的会话，恢复发送按钮
+      if (currentSessionId === sessionId) {
+        document.getElementById('send-btn').disabled = false;
+      }
+      renderSessions();
+    }
     // 打字机函数：每帧输出 charsPerFrame 个字符，流畅无卡顿
     function typewrite(el, text, charsPerFrame) {
       return new Promise(resolve => {
@@ -417,7 +431,7 @@
 
     // 重新回答：删除该 assistant 消息，重新发送
     async function regenerate(idx) {
-      if (isStreaming) return;
+      if (pendingRequests.has(currentSessionId)) return;
       // 找到该 assistant 消息对应的 user 消息（前一条）
       const userMsg = messages[idx - 1];
       if (!userMsg || userMsg.role !== 'user') return;
