@@ -256,7 +256,13 @@
       const ta = document.getElementById('prompt');
       const text = ta.value.trim();
       if (!text || isStreaming) return;
-      if (!currentSessionId) newChat();
+      if (!currentSessionId) {
+        const id = 'chat_' + Date.now();
+        sessions.unshift({ id, title: '新对话', messages: [], created: Date.now() });
+        currentSessionId = id;
+        saveSessions();
+        renderSessions();
+      }
 
       messages.push({ role: 'user', content: text });
       ta.value = ''; ta.style.height = 'auto';
