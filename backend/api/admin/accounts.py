@@ -329,6 +329,7 @@ async def disable_memory_all(request: Request, _=Depends(_require_admin)):
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 "Origin": "https://chat.qwen.ai",
             }
+            # 1. 关闭 4 个记忆开关
             body = {
                 "memory": {"enable_memory": False, "enable_history_memory": False},
                 "tools_enabled": {
@@ -338,10 +339,20 @@ async def disable_memory_all(request: Request, _=Depends(_require_admin)):
             }
             async with httpx.AsyncClient(timeout=10) as hc:
                 resp = await hc.post("https://chat.qwen.ai/api/v2/users/user/settings/update", headers=headers, json=body)
-            if resp.status_code == 200:
-                success += 1
-            else:
-                failed += 1
+                if resp.status_code != 200:
+                    failed += 1
+                    return
+                # 2. 获取并删除已有记忆
+                mem_resp = await hc.get("https://chat.qwen.ai/api/v2/memories/?page_size=50&page_num=1", headers=headers)
+                if mem_resp.status_code == 200:
+                    import json as _json
+                    mem_data = mem_resp.json()
+                    nodes = mem_data.get("data", {}).get("memory_nodes", [])
+                    for node in nodes:
+                        node_id = node.get("id", "")
+                        if node_id:
+                            await hc.delete(f"https://chat.qwen.ai/api/v2/memories/{node_id}", headers=headers)
+            success += 1
         except Exception:
             failed += 1
 
