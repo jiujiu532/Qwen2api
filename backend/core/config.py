@@ -79,6 +79,12 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
     LOG_MAX_DAYS: int = int(os.getenv("LOG_MAX_DAYS", 7))
 
+    # 请求超时配置（秒）
+    TIMEOUT_CHAT: int = int(os.getenv("TIMEOUT_CHAT", 60))
+    TIMEOUT_IMAGE: int = int(os.getenv("TIMEOUT_IMAGE", 60))
+    TIMEOUT_STREAM_IDLE: int = int(os.getenv("TIMEOUT_STREAM_IDLE", 60))
+    TIMEOUT_REGISTER: int = int(os.getenv("TIMEOUT_REGISTER", 60))
+
 
     # 数据文件路径
     ACCOUNTS_FILE: str = os.getenv("ACCOUNTS_FILE", str(DATA_DIR / "accounts.json"))
@@ -124,6 +130,7 @@ _PERSIST_KEYS = [
     "MOEMAIL_DOMAIN", "MOEMAIL_KEY", "TEMPMAIL_DOMAIN", "TEMPMAIL_KEY",
     "PROXY_ENABLED", "PROXY_URL", "PROXY_USERNAME", "PROXY_PASSWORD",
     "LOG_LEVEL", "LOG_MAX_DAYS",
+    "TIMEOUT_CHAT", "TIMEOUT_IMAGE", "TIMEOUT_STREAM_IDLE", "TIMEOUT_REGISTER",
 ]
 
 def save_runtime_settings():

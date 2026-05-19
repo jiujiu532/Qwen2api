@@ -162,6 +162,15 @@
               { key: 'proxy_password', label: '密码', type: 'password', desc: '代理认证密码（可选）。', showIf: 'proxy_enabled' },
             ]
           },
+          {
+            title: '请求超时设置', section: 'timeout',
+            fields: [
+              { key: 'timeout_chat', label: '对话请求超时（秒）', type: 'number', desc: '对话与图像编辑请求的 HTTP 连接超时时间。' },
+              { key: 'timeout_image', label: '图像请求超时（秒）', type: 'number', desc: '图像生成请求的总超时时间。' },
+              { key: 'timeout_stream_idle', label: '流式空闲超时（秒）', type: 'number', desc: '流式接收阶段片段之间的最长连续空闲等待时长。' },
+              { key: 'timeout_register', label: '注册请求超时（秒）', type: 'number', desc: '账号注册流程的统一超时时间。' },
+            ]
+          },
         ]
       },
       {

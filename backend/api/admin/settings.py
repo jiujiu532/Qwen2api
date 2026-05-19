@@ -41,6 +41,10 @@ async def get_settings(_=Depends(_require_admin)):
         "default_stream": getattr(settings, "DEFAULT_STREAM", True),
         "log_level": getattr(settings, "LOG_LEVEL", "INFO"),
         "log_max_days": getattr(settings, "LOG_MAX_DAYS", 7),
+        "timeout_chat": getattr(settings, "TIMEOUT_CHAT", 60),
+        "timeout_image": getattr(settings, "TIMEOUT_IMAGE", 60),
+        "timeout_stream_idle": getattr(settings, "TIMEOUT_STREAM_IDLE", 60),
+        "timeout_register": getattr(settings, "TIMEOUT_REGISTER", 60),
     }
 
 
@@ -73,6 +77,10 @@ async def get_default_settings(_=Depends(_require_admin)):
         "default_stream": True,
         "log_level": "INFO",
         "log_max_days": 7,
+        "timeout_chat": 60,
+        "timeout_image": 60,
+        "timeout_stream_idle": 60,
+        "timeout_register": 60,
     }
 
 
@@ -136,6 +144,14 @@ async def update_settings(request: Request, _=Depends(_require_admin)):
         settings.LOG_LEVEL = str(body["log_level"]).upper()
     if "log_max_days" in body:
         settings.LOG_MAX_DAYS = max(1, int(body["log_max_days"]))
+    if "timeout_chat" in body:
+        settings.TIMEOUT_CHAT = max(1, int(body["timeout_chat"]))
+    if "timeout_image" in body:
+        settings.TIMEOUT_IMAGE = max(1, int(body["timeout_image"]))
+    if "timeout_stream_idle" in body:
+        settings.TIMEOUT_STREAM_IDLE = max(1, int(body["timeout_stream_idle"]))
+    if "timeout_register" in body:
+        settings.TIMEOUT_REGISTER = max(1, int(body["timeout_register"]))
 
     save_runtime_settings()
     return {"ok": True}
