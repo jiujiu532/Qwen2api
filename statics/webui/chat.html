@@ -76,11 +76,14 @@
 
     .typing-dots span{display:inline-block;width:5px;height:5px;border-radius:50%;background:#bbb;margin:0 2px;animation:tdot 1.4s infinite}
 
-    /* Thinking/reasoning block */
-    .webui-thinking{margin-bottom:10px;border:1px solid #ece9e1;border-radius:8px;overflow:hidden}
-    .webui-thinking summary{padding:8px 12px;font-size:11px;font-weight:600;color:#75716b;cursor:pointer;background:#faf8f5;user-select:none}
-    .webui-thinking summary:hover{background:#f5f3ef}
-    .webui-thinking-body{padding:10px 12px;font-size:12px;line-height:1.6;color:#666;white-space:pre-wrap;max-height:300px;overflow-y:auto;background:#fdfcfa}
+    /* Thinking/reasoning block - grok2api style */
+    .webui-thinking{margin-bottom:12px}
+    .webui-thinking-toggle{display:flex;align-items:center;gap:4px;font-size:14px;font-weight:600;color:#8a7e6d;cursor:pointer;user-select:none;padding:4px 0}
+    .webui-thinking-toggle:hover{color:#5c5347}
+    .webui-thinking-toggle svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;transition:transform .2s}
+    .webui-thinking-toggle.collapsed svg{transform:rotate(-90deg)}
+    .webui-thinking-body{margin-top:8px;padding-left:14px;border-left:2px solid #e0dcd6;font-size:13px;line-height:1.7;color:#8a8a8a;white-space:pre-wrap}
+    .webui-thinking-body.hidden{display:none}
     .typing-dots span:nth-child(2){animation-delay:.2s}
     .typing-dots span:nth-child(3){animation-delay:.4s}
     @keyframes tdot{0%,80%,100%{opacity:.3}40%{opacity:1}}
@@ -245,7 +248,12 @@
     function formatAssistantMsg(reasoning, content) {
       let html = '';
       if (reasoning) {
-        html += `<details class="webui-thinking" open><summary>思考过程</summary><div class="webui-thinking-body">${esc(reasoning)}</div></details>`;
+        html += `<div class="webui-thinking">
+          <div class="webui-thinking-toggle" onclick="this.classList.toggle('collapsed');this.nextElementSibling.classList.toggle('hidden')">
+            思考过程 <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+          <div class="webui-thinking-body">${esc(reasoning)}</div>
+        </div>`;
       }
       if (content) {
         html += renderMd(content);
