@@ -266,11 +266,23 @@
       return `<div class="cfg-group" style="padding:16px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
           <span style="font-size:12px;color:var(--fg-muted)">${keys.length} 个密钥</span>
-          <button class="btn btn-primary" onclick="genKey()">生成新密钥</button>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-danger" id="btn-batch-del-keys" onclick="batchDelKeys()" style="display:none">批量删除</button>
+            <button class="btn btn-primary" onclick="genKey()">生成新密钥</button>
+          </div>
         </div>
         <div style="font-size:11px;color:#9a9a9a;margin-bottom:12px">OpenAI 兼容 API 的鉴权密钥。留空则禁用鉴权。</div>
         ${keys.length === 0 ? '<div style="text-align:center;padding:32px;color:var(--fg-muted);font-size:12px">暂无密钥</div>' :
-          keys.map(k => `<div class="key-item"><code>${k}</code><div style="display:flex;align-items:center;gap:10px"><button style="font-size:11px;color:#666;cursor:pointer" onclick="navigator.clipboard.writeText('${k}');showToast('已复制')">复制</button><button class="key-delete" onclick="delKey('${k}')">删除</button></div></div>`).join('')}
+          keys.map(k => `<div class="key-item">
+            <div style="display:flex;align-items:center;gap:10px">
+              <input type="checkbox" class="key-check" data-key="${k}" onchange="updateKeyBatchBtn()">
+              <code>${k}</code>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <button style="font-size:11px;color:#666;cursor:pointer" onclick="navigator.clipboard.writeText('${k}');showToast('已复制')">复制</button>
+              <button class="key-delete" onclick="delKey('${k}')">删除</button>
+            </div>
+          </div>`).join('')}
       </div>`;
     }
 
@@ -368,6 +380,23 @@
       await fetchKeys();
       renderPanel();
       showToast('已删除');
+    }
+
+    function updateKeyBatchBtn() {
+      const checked = document.querySelectorAll('.key-check:checked');
+      const btn = document.getElementById('btn-batch-del-keys');
+      if (btn) btn.style.display = checked.length > 0 ? '' : 'none';
+    }
+
+    async function batchDelKeys() {
+      const checked = [...document.querySelectorAll('.key-check:checked')].map(cb => cb.dataset.key);
+      if (!confirm(`确认删除 ${checked.length} 个密钥?`)) return;
+      for (const k of checked) {
+        await fetch('/api/admin/keys/' + encodeURIComponent(k), { method: 'DELETE', headers: authHeaders() });
+      }
+      await fetchKeys();
+      renderPanel();
+      showToast(`已删除 ${checked.length} 个密钥`);
     }
 
     init();
