@@ -146,8 +146,6 @@ def save_runtime_settings():
         val = getattr(settings, key, None)
         if val is not None:
             data[key] = val
-    # MODEL_MAP 单独持久化
-    data["MODEL_MAP"] = dict(MODEL_MAP)
     try:
         _RUNTIME_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
         with open(_RUNTIME_CONFIG_FILE, "w", encoding="utf-8") as f:
@@ -163,10 +161,8 @@ def _load_runtime_settings():
         with open(_RUNTIME_CONFIG_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
         for key, val in data.items():
-            if key == "MODEL_MAP" and isinstance(val, dict):
-                MODEL_MAP.clear()
-                MODEL_MAP.update(val)
-                continue
+            if key == "MODEL_MAP":
+                continue  # 不再加载模型映射
             if key in _PERSIST_KEYS and hasattr(settings, key):
                 expected_type = type(getattr(settings, key))
                 try:
@@ -191,6 +187,8 @@ BUILTIN_MODELS = [
     # Qwen 3.7 系列（仅支持思考模式）
     "qwen3.7-max-preview-thinking",
     "qwen3.7-plus-preview-thinking",
+    # 生图专用模型
+    "z-image",
 ]
 
 # 默认模型（未知模型名的 fallback）

@@ -155,7 +155,10 @@ async def chat_completions(request: Request):
     history_messages = req_data.get("messages", [])
     log.info(f"[OAI] model={qwen_model}, stream={stream}, tools={[t.get('name') for t in tools]}, thinking={req_thinking}, prompt_len={len(prompt)}")
 
-    # T2I 路由（暂留）
+    # T2I 路由：z-image 模型强制生图，其他模型检测关键词
+    if model_name == "z-image":
+        return await _handle_t2i(request, client, history_messages, "z-image", stream)
+
     media_intent = _detect_media_intent(history_messages)
     if media_intent == "t2v":
         log.warning("[OAI] t2v intent detected but not yet validated; falling back to t2t")
