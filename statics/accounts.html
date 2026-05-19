@@ -349,10 +349,13 @@
     }
 
     function exportJSON() {
-      if (accounts.length === 0) { showToast('无可导出数据'); return; }
-      const data = JSON.stringify(accounts, null, 2);
+      // 如果有勾选，导出勾选的；否则导出全部
+      const exportData = selectedEmails.size > 0
+        ? accounts.filter(a => selectedEmails.has(a.email))
+        : accounts;
+      if (exportData.length === 0) { showToast('无可导出数据'); return; }
+      const data = JSON.stringify(exportData, null, 2);
       downloadFile(data, `qwen2api-accounts-${dateStr()}.json`, 'application/json');
-      document.getElementById('export-menu').style.display = 'none';
     }
 
     function exportTXT() {
