@@ -53,12 +53,21 @@
       </div>
       <div class="toolbar-right">
         <div class="filter-bar" style="margin:0" id="filters"></div>
+        <select id="page-size-select" onchange="changePageSize(this.value)" style="height:28px;padding:0 8px;border-radius:999px;font-size:11px;background:#fafafa;border:0;color:#8f8f8f">
+          <option value="50">50 / 页</option>
+          <option value="100">100 / 页</option>
+          <option value="200">200 / 页</option>
+          <option value="500">500 / 页</option>
+          <option value="1000">1000 / 页</option>
+          <option value="2000">2000 / 页</option>
+        </select>
       </div>
     </div>
 
     <div class="table-card">
       <table>
         <thead><tr>
+          <th style="width:32px"><input type="checkbox" id="select-all" onchange="toggleSelectAll(this.checked)"></th>
           <th>TOKEN</th>
           <th>运行状态</th>
           <th>RPM</th>
@@ -69,6 +78,13 @@
         </tr></thead>
         <tbody id="table-body"></tbody>
       </table>
+    </div>
+
+    <!-- Batch actions (shown when items selected) -->
+    <div id="batch-bar" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#111;color:#fff;padding:8px 16px;border-radius:999px;font-size:12px;font-weight:500;display:none;align-items:center;gap:12px;box-shadow:0 8px 24px rgba(0,0,0,.15)">
+      <span id="batch-count">0 个已选</span>
+      <button onclick="batchVerify()" style="color:#fff;font-size:11px;font-weight:600;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.15)">批量验证</button>
+      <button onclick="batchDelete()" style="color:#ff6b6b;font-size:11px;font-weight:600;padding:4px 10px;border-radius:999px;background:rgba(255,100,100,.1)">批量删除</button>
     </div>
   </main>
 
@@ -132,8 +148,9 @@
 
       const paged = filtered.slice((page-1)*pageSize, page*pageSize);
       document.getElementById('table-body').innerHTML = paged.length === 0
-        ? '<tr><td colspan="7" style="text-align:center;padding:48px;color:var(--fg-muted)">暂无账号</td></tr>'
+        ? '<tr><td colspan="8" style="text-align:center;padding:48px;color:var(--fg-muted)">暂无账号</td></tr>'
         : paged.map(a => `<tr>
+          <td><input type="checkbox" class="row-check" data-email="${a.email}" onchange="updateBatchBar()"></td>
           <td><span class="tok">${maskToken(a.token)}</span> <button class="row-btn" onclick="copyToken('${a.token}')"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></td>
           <td>${statusBadge(a.status)}</td>
           <td style="font-size:12px;color:#666;font-variant-numeric:tabular-nums">${a.rpm_1min || 0}</td>
@@ -185,6 +202,47 @@
       if (!confirm('确认删除?')) return;
       await fetch('/api/admin/accounts/'+encodeURIComponent(email), { method:'DELETE', headers:authHeaders() });
       showToast('已删除');
+      fetchAccounts();
+    }
+
+    function changePageSize(v) { pageSize = +v; page = 1; render() }
+
+    function toggleSelectAll(checked) {
+      document.querySelectorAll('.row-check').forEach(cb => cb.checked = checked);
+      updateBatchBar();
+    }
+
+    function updateBatchBar() {
+      const checked = document.querySelectorAll('.row-check:checked');
+      const bar = document.getElementById('batch-bar');
+      if (checked.length > 0) {
+        bar.style.display = 'flex';
+        document.getElementById('batch-count').textContent = checked.length + ' 个已选';
+      } else {
+        bar.style.display = 'none';
+      }
+    }
+
+    function getSelectedEmails() {
+      return [...document.querySelectorAll('.row-check:checked')].map(cb => cb.dataset.email);
+    }
+
+    async function batchVerify() {
+      const emails = getSelectedEmails();
+      for (const email of emails) {
+        await fetch('/api/admin/accounts/'+encodeURIComponent(email)+'/verify', { method:'POST', headers:authHeaders() });
+      }
+      showToast(`已验证 ${emails.length} 个账号`);
+      fetchAccounts();
+    }
+
+    async function batchDelete() {
+      const emails = getSelectedEmails();
+      if (!confirm(`确认删除 ${emails.length} 个账号?`)) return;
+      for (const email of emails) {
+        await fetch('/api/admin/accounts/'+encodeURIComponent(email), { method:'DELETE', headers:authHeaders() });
+      }
+      showToast(`已删除 ${emails.length} 个`);
       fetchAccounts();
     }
 
