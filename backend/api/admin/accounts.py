@@ -342,16 +342,8 @@ async def disable_memory_all(request: Request, _=Depends(_require_admin)):
                 if resp.status_code != 200:
                     failed += 1
                     return
-                # 2. 获取并删除已有记忆
-                mem_resp = await hc.get("https://chat.qwen.ai/api/v2/memories/?page_size=50&page_num=1", headers=headers)
-                if mem_resp.status_code == 200:
-                    import json as _json
-                    mem_data = mem_resp.json()
-                    nodes = mem_data.get("data", {}).get("memory_nodes", [])
-                    for node in nodes:
-                        node_id = node.get("id", "")
-                        if node_id:
-                            await hc.delete(f"https://chat.qwen.ai/api/v2/memories/{node_id}", headers=headers)
+                # 2. 删除所有已有记忆（"忘记一切"）
+                await hc.post("https://chat.qwen.ai/api/v2/memories/delete", headers=headers, json={"forget_all": True})
             success += 1
         except Exception:
             failed += 1
