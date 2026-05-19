@@ -6,54 +6,193 @@
   <title>qwen2api - 配置管理</title>
   <link href="https://cdn.jsdelivr.net/npm/geist@1.0.0/dist/fonts/geist-sans/style.css" rel="stylesheet">
   <link href="/statics/css/app.css" rel="stylesheet">
+  <style>
+    /* Config page specific styles (mimic grok2api) */
+    .cfg-nav{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+    .cfg-tab{height:30px;padding:0 12px;border-radius:999px;font-size:12px;font-weight:500;color:#8f8f8f;background:#f5f5f5;transition:color .15s,background .15s;cursor:pointer}
+    .cfg-tab:hover{color:#555;background:#f1f1f1}
+    .cfg-tab.active{background:#111;color:#fff;font-weight:600}
+
+    .cfg-group{background:#fff;border:none;border-radius:12px;overflow:hidden;margin-bottom:12px}
+    .cfg-group-title{font-size:11px;font-weight:700;color:#8d8d8d;text-transform:uppercase;letter-spacing:.08em;padding:12px 16px 6px;background:#fff}
+
+    .cfg-row{display:grid;grid-template-columns:minmax(0,2fr) minmax(280px,1fr);gap:18px;align-items:center;padding:11px 16px;border-bottom:1px solid #f5f5f5;transition:background .15s}
+    .cfg-row:last-child{border-bottom:none}
+    .cfg-row:hover{background:#fcfcfc}
+    .cfg-row.modified{background:#fffaf0}
+    .cfg-row.modified:hover{background:#fff6e7}
+
+    .cfg-label{font-size:12px;font-weight:600;color:#222;line-height:1.35;display:inline-flex;align-items:center;gap:6px}
+    .cfg-desc{max-width:520px;font-size:11px;color:#9a9a9a;line-height:1.45;margin-top:3px}
+
+    .cfg-input-col{min-width:0;display:flex;align-items:center;justify-content:flex-end;gap:8px}
+
+    .cfg-text{width:100%;height:32px;padding:0 10px;font-size:13px;border-radius:8px;border:1px solid #ececec;background:#fbfbfb;text-align:right;transition:border-color .15s,background .15s}
+    .cfg-text:focus{border-color:#d7d7d7;background:#fff;outline:none}
+    .cfg-number{width:100%;height:32px;padding:0 10px;font-size:13px;border-radius:8px;border:1px solid #ececec;background:#fbfbfb;text-align:right}
+    .cfg-number:focus{border-color:#d7d7d7;background:#fff;outline:none}
+    .cfg-select{width:100%;height:32px;padding:0 28px 0 10px;font-size:13px;border-radius:8px;border:1px solid #ececec;background:#fbfbfb;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24'%3E%3Cpath d='M6 9l6 6 6-6' stroke='%23666' stroke-width='2' fill='none'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;cursor:pointer;text-align:right}
+    .cfg-select:focus{border-color:#d7d7d7;background:#fff;outline:none}
+
+    .cfg-toggle{position:relative;display:inline-block;width:36px;height:20px;flex-shrink:0}
+    .cfg-toggle input{opacity:0;width:0;height:0}
+    .cfg-toggle-track{position:absolute;cursor:pointer;inset:0;background:#ddd;border-radius:20px;transition:background .2s}
+    .cfg-toggle-track::before{content:'';position:absolute;width:14px;height:14px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:transform .2s;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+    .cfg-toggle input:checked+.cfg-toggle-track{background:#111}
+    .cfg-toggle input:checked+.cfg-toggle-track::before{transform:translateX(16px)}
+
+    .pwd-eye{width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;color:#9a9a9a;border-radius:4px;flex-shrink:0;cursor:pointer}
+    .pwd-eye:hover{color:#222;background:#f5f5f5}
+    .pwd-eye svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.8}
+
+    /* Save bar */
+    .save-bar{position:fixed;left:50%;bottom:18px;z-index:50;width:min(calc(100% - 56px),1280px);transform:translate(-50%,calc(100% + 20px));background:rgba(255,255,255,.96);border:1px solid #efefef;border-radius:16px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;transition:transform .25s ease;box-shadow:0 4px 24px rgba(0,0,0,.06)}
+    .save-bar.visible{transform:translate(-50%,0)}
+    .save-bar-msg{font-size:13px;color:var(--fg-muted)}
+    .save-bar-actions{display:flex;gap:8px}
+
+    @media(max-width:640px){
+      .cfg-row{grid-template-columns:1fr;gap:8px;align-items:flex-start}
+      .cfg-input-col{justify-content:flex-start}
+    }
+  </style>
 </head>
 <body>
   <header class="admin-header" id="admin-header"></header>
-  <main class="admin-main">
+  <main class="admin-main" style="padding-bottom:80px">
     <div class="page-hd">
       <div>
         <div class="page-title">配置管理</div>
-        <div class="page-sub">管理系统运行时参数与服务默认行为</div>
+        <div class="page-sub">统一管理运行时参数与服务行为。保存后即时生效。</div>
       </div>
       <div class="page-actions">
-        <button class="btn btn-secondary" onclick="resetConfig()">重置</button>
-        <button class="btn btn-primary" onclick="saveAll()">保存</button>
+        <button class="btn btn-secondary" onclick="doReset()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.708"/><path d="M3 4v5h5"/></svg>
+          重置
+        </button>
+        <button class="btn btn-primary" id="btn-save" onclick="doSave()" disabled>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 4.2 4.2L19 6.5"/></svg>
+          保存
+        </button>
       </div>
     </div>
 
-    <!-- Tabs -->
-    <div class="tab-bar" id="tabs"></div>
+    <!-- Section tabs -->
+    <div class="cfg-nav" id="cfg-nav"></div>
 
-    <!-- Content -->
-    <div class="config-card" id="config-content"></div>
+    <!-- Section panels -->
+    <div id="cfg-panels"></div>
   </main>
+
+  <!-- Save bar (bottom) -->
+  <div class="save-bar" id="save-bar">
+    <div class="save-bar-msg">存在未保存的更改</div>
+    <div class="save-bar-actions">
+      <button class="btn btn-secondary" onclick="doReset()">撤销</button>
+      <button class="btn btn-primary" onclick="doSave()">保存</button>
+    </div>
+  </div>
 
   <script src="/statics/js/common.js"></script>
   <script>
-    let settings = {}, keys = [], currentTab = 'system';
-    let configSnapshot = {}; // 初始值快照，用于检测修改
-
-    const tabs = [
-      { key:'system', label:'系统配置' },
-      { key:'model', label:'模型映射' },
-      { key:'mail', label:'邮箱渠道' },
-      { key:'proxy', label:'网络代理' },
-      { key:'keys', label:'API 密钥' },
+    // 配置 schema 定义
+    const SCHEMA = [
+      {
+        id: 'system', label: '系统配置',
+        groups: [
+          {
+            title: '基础访问控制', section: 'app',
+            fields: [
+              { key: 'app_url', label: 'APP 访问地址', type: 'text', desc: '应用对外提供服务的根 URL，格式如 https://your-domain.com。' },
+              { key: 'admin_key', label: 'APP 访问密码', type: 'password', desc: '管理后台鉴权密码。修改后已有 Session 将立即失效，需重新登录。' },
+              { key: 'default_stream', label: '默认流式回复', type: 'bool', desc: '客户端未传 stream 字段时的默认行为。' },
+            ]
+          },
+          {
+            title: '引擎与并发', section: 'engine',
+            fields: [
+              { key: 'engine_mode', label: '驱动引擎', type: 'select', options: [{value:'httpx',label:'httpx'},{value:'browser',label:'browser'},{value:'hybrid',label:'hybrid'}], desc: 'httpx 快速直连 / browser 浏览器指纹 / hybrid 混合。' },
+              { key: 'max_inflight_per_account', label: '单账号并发', type: 'number', desc: '每个账号同时处理的最大请求数，1=最安全。' },
+            ]
+          },
+          {
+            title: '自动补号', section: 'replenish',
+            fields: [
+              { key: 'auto_replenish', label: '启用自动补号', type: 'bool', desc: '账号耗尽时自动触发注册补充。' },
+              { key: 'replenish_target', label: '目标账号数', type: 'number', desc: '池中账号低于此数时触发补号。', showIf: 'auto_replenish' },
+            ]
+          },
+        ]
+      },
+      {
+        id: 'mail', label: '邮箱渠道',
+        groups: [
+          {
+            title: 'MoeMail', section: 'moemail',
+            fields: [
+              { key: 'moemail_domain', label: '域名', type: 'text', desc: 'MoeMail 自建邮箱的域名。' },
+              { key: 'moemail_key', label: 'API Key', type: 'password', desc: 'MoeMail 的 API 密钥。' },
+            ]
+          },
+          {
+            title: 'TempMail', section: 'tempmail',
+            fields: [
+              { key: 'tempmail_domain', label: '域名', type: 'text', desc: 'TempMail 自建邮箱的域名。' },
+              { key: 'tempmail_key', label: 'API Key', type: 'password', desc: 'TempMail 的 API 密钥。' },
+            ]
+          },
+        ]
+      },
+      {
+        id: 'proxy', label: '网络代理',
+        groups: [
+          {
+            title: '出站代理设置', section: 'proxy',
+            fields: [
+              { key: 'proxy_enabled', label: '启用代理', type: 'bool', desc: '注册时使用代理绕过 WAF 限制。' },
+              { key: 'proxy_url', label: '代理地址', type: 'text', desc: '格式: http://host:port 或 socks5://host:port', showIf: 'proxy_enabled' },
+              { key: 'proxy_username', label: '用户名', type: 'text', desc: '代理认证用户名（可选）。', showIf: 'proxy_enabled' },
+              { key: 'proxy_password', label: '密码', type: 'password', desc: '代理认证密码（可选）。', showIf: 'proxy_enabled' },
+            ]
+          },
+        ]
+      },
+      {
+        id: 'model', label: '模型映射',
+        groups: [
+          {
+            title: '模型别名', section: 'model',
+            fields: [
+              { key: 'model_aliases', label: '映射表', type: 'json', desc: 'JSON 格式，key 为请求中的模型名，value 为 Qwen 真实模型名。' },
+            ]
+          },
+        ]
+      },
+      {
+        id: 'keys', label: 'API 密钥',
+        groups: []
+      },
     ];
+
+    let settings = {};
+    let configSnapshot = {};
+    let keys = [];
+    let currentTab = 'system';
+    let dirty = false;
 
     async function init() {
       if (!await checkAuth()) return;
       renderHeader('config');
       await fetchSettings();
       await fetchKeys();
-      renderTabs();
-      renderContent();
+      renderNav();
+      renderPanel();
     }
 
     async function fetchSettings() {
       const r = await fetch('/api/admin/settings', { headers: authHeaders() });
       settings = await r.json();
-      configSnapshot = JSON.parse(JSON.stringify(settings)); // 深拷贝作为基准
+      configSnapshot = JSON.parse(JSON.stringify(settings));
     }
 
     async function fetchKeys() {
@@ -62,267 +201,170 @@
       keys = d.keys || [];
     }
 
-    function renderTabs() {
-      document.getElementById('tabs').innerHTML = tabs.map(t =>
-        `<button class="tab ${currentTab===t.key?'active':''}" onclick="switchTab('${t.key}')">${t.label}</button>`
+    function renderNav() {
+      document.getElementById('cfg-nav').innerHTML = SCHEMA.map(s =>
+        `<button class="cfg-tab ${currentTab===s.id?'active':''}" onclick="switchTab('${s.id}')">${s.label}</button>`
       ).join('');
     }
 
-    function switchTab(t) { currentTab = t; renderTabs(); renderContent() }
+    function switchTab(id) { currentTab = id; renderNav(); renderPanel(); }
 
-    function renderContent() {
-      const el = document.getElementById('config-content');
-      if (currentTab === 'system') el.innerHTML = renderSystem();
-      else if (currentTab === 'model') el.innerHTML = renderModel();
-      else if (currentTab === 'mail') el.innerHTML = renderMail();
-      else if (currentTab === 'proxy') el.innerHTML = renderProxy();
-      else if (currentTab === 'keys') el.innerHTML = renderKeys();
+    function renderPanel() {
+      const panel = document.getElementById('cfg-panels');
+      const section = SCHEMA.find(s => s.id === currentTab);
+      if (!section) { panel.innerHTML = ''; return; }
+
+      // 特殊处理 keys tab
+      if (currentTab === 'keys') { panel.innerHTML = renderKeysPanel(); return; }
+
+      let html = '';
+      for (const group of section.groups) {
+        html += `<div class="cfg-group"><div class="cfg-group-title">${group.title}</div>`;
+        for (const field of group.fields) {
+          const hidden = field.showIf && !settings[field.showIf];
+          html += `<div class="cfg-row" data-key="${field.key}" style="${hidden?'display:none':''}">`;
+          html += `<div><div class="cfg-label">${field.label}</div><div class="cfg-desc">${field.desc}</div></div>`;
+          html += `<div class="cfg-input-col">${renderField(field)}</div>`;
+          html += `</div>`;
+        }
+        html += `</div>`;
+      }
+      panel.innerHTML = html;
     }
 
-    function renderSystem() {
-      return `
-        <div style="font-size:12px;color:var(--fg-muted);padding-bottom:8px;border-bottom:1px solid #f5f5f5;margin-bottom:16px">基础访问控制</div>
-        <div class="config-row" data-key="app_url">
-          <div><div class="config-label">APP 访问地址</div><div class="config-desc">应用对外提供服务的根 URL，格式如 https://your-domain.com</div></div>
-          <input class="config-input" style="width:280px" data-key="app_url" value="${settings.app_url||''}" placeholder="https://your-domain.com" oninput="onConfigChange(this,'app_url')">
-        </div>
-        <div class="config-row" data-key="admin_key">
-          <div><div class="config-label">APP 访问密码</div><div class="config-desc">管理后台鉴权密码。修改后已有 Session 将立即失效，需重新登录。</div></div>
-          <div class="pwd-wrap">
-            <input type="password" class="config-input" style="width:200px;padding-right:32px" data-key="admin_key" value="${settings.admin_key||''}" oninput="onConfigChange(this,'admin_key')">
-            <button class="pwd-toggle" onclick="togglePwd(this)" type="button">
-              <svg class="eye-open" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-              <svg class="eye-slash" style="display:none" viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-            </button>
-          </div>
-        </div>
-        <div class="config-row" data-key="default_stream">
-          <div><div class="config-label">默认流式回复</div><div class="config-desc">客户端未传 stream 字段时的默认行为</div></div>
-          <div class="toggle ${settings.default_stream!==false?'on':''}" onclick="this.classList.toggle('on');settings.default_stream=this.classList.contains('on');markModified('default_stream')"></div>
-        </div>
-        <div class="config-row" data-key="engine_mode">
-          <div><div class="config-label">驱动引擎</div><div class="config-desc">httpx 快速直连 / browser 浏览器指纹 / hybrid 混合</div></div>
-          <select class="config-select" data-key="engine_mode" onchange="settings.engine_mode=this.value;markModified('engine_mode')">
-            <option value="httpx" ${settings.engine_mode==='httpx'?'selected':''}>httpx</option>
-            <option value="browser" ${settings.engine_mode==='browser'?'selected':''}>browser</option>
-            <option value="hybrid" ${settings.engine_mode==='hybrid'?'selected':''}>hybrid</option>
-          </select>
-        </div>
-        <div class="config-row" data-key="max_inflight_per_account">
-          <div><div class="config-label">单账号并发</div><div class="config-desc">每个账号同时处理的最大请求数，1=最安全</div></div>
-          <input type="number" class="config-input" data-key="max_inflight_per_account" value="${settings.max_inflight_per_account||1}" min="1" max="10" oninput="onConfigChange(this,'max_inflight_per_account',true)">
-        </div>
-
-        <div style="font-size:12px;color:var(--fg-muted);padding-bottom:8px;border-bottom:1px solid #f5f5f5;margin:24px 0 16px">自动补号</div>
-        <div class="config-row" data-key="auto_replenish">
-          <div><div class="config-label">启用自动补号</div><div class="config-desc">账号耗尽时自动触发注册补充</div></div>
-          <div class="toggle ${settings.auto_replenish?'on':''}" onclick="this.classList.toggle('on');settings.auto_replenish=this.classList.contains('on');document.getElementById('replenish-target').style.display=settings.auto_replenish?'':'none';markModified('auto_replenish')"></div>
-        </div>
-        <div class="config-row" id="replenish-target" data-key="replenish_target" style="${settings.auto_replenish?'':'display:none'}">
-          <div><div class="config-label">目标账号数</div><div class="config-desc">池中账号低于此数时触发补号</div></div>
-          <input type="number" class="config-input" data-key="replenish_target" value="${settings.replenish_target||30}" oninput="onConfigChange(this,'replenish_target',true)">
-        </div>
-      `;
+    function renderField(field) {
+      const val = settings[field.key];
+      switch (field.type) {
+        case 'text':
+          return `<input class="cfg-text" value="${val||''}" data-key="${field.key}" oninput="onInput(this)">`;
+        case 'password':
+          return `<input type="password" class="cfg-text" value="${val||''}" data-key="${field.key}" oninput="onInput(this)">
+                  <button class="pwd-eye" onclick="togglePwd(this)"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>`;
+        case 'number':
+          return `<input type="number" class="cfg-number" value="${val||0}" data-key="${field.key}" oninput="onInput(this,true)">`;
+        case 'select':
+          return `<select class="cfg-select" data-key="${field.key}" onchange="onInput(this)">${field.options.map(o => `<option value="${o.value}" ${val===o.value?'selected':''}>${o.label}</option>`).join('')}</select>`;
+        case 'bool':
+          return `<label class="cfg-toggle"><input type="checkbox" ${val?'checked':''} data-key="${field.key}" onchange="onToggle(this)"><span class="cfg-toggle-track"></span></label>`;
+        case 'json':
+          const json = JSON.stringify(val || {}, null, 2);
+          return `<textarea class="cfg-text" style="width:100%;min-height:300px;text-align:left;font-family:var(--font-mono);font-size:12px;line-height:1.6;resize:vertical;padding:12px" data-key="${field.key}" oninput="onInput(this)">${json}</textarea>`;
+        default:
+          return '';
+      }
     }
 
-    function renderModel() {
-      const json = JSON.stringify(settings.model_aliases || {}, null, 2);
-      return `
-        <div style="font-size:12px;color:var(--fg-muted);margin-bottom:12px">JSON 格式，key 为请求中的模型名，value 为 Qwen 真实模型名</div>
-        <textarea id="model-json" style="width:100%;height:400px;padding:16px;font-size:12px;font-family:var(--font-mono);border-radius:12px;border:1px solid var(--border);background:#fafafa;resize:vertical;line-height:1.6">${json}</textarea>
-      `;
-    }
-
-    function renderMail() {
-      return `
-        <div style="font-size:12px;color:var(--fg-muted);padding-bottom:8px;border-bottom:1px solid #f5f5f5;margin-bottom:16px">MoeMail</div>
-        <div class="config-row">
-          <div><div class="config-label">域名</div><div class="config-desc">MoeMail 自建邮箱的域名</div></div>
-          <input class="config-input" style="width:280px" value="${settings.moemail_domain||''}" placeholder="example.com" onchange="settings.moemail_domain=this.value">
-        </div>
-        <div class="config-row">
-          <div><div class="config-label">API Key</div><div class="config-desc">MoeMail 的 API 密钥</div></div>
-          <input class="config-input" style="width:280px" value="${settings.moemail_key||''}" placeholder="密钥" onchange="settings.moemail_key=this.value">
-        </div>
-        <div style="font-size:12px;color:var(--fg-muted);padding-bottom:8px;border-bottom:1px solid #f5f5f5;margin:24px 0 16px">TempMail</div>
-        <div class="config-row">
-          <div><div class="config-label">域名</div><div class="config-desc">TempMail 自建邮箱的域名</div></div>
-          <input class="config-input" style="width:280px" value="${settings.tempmail_domain||''}" placeholder="example.com" onchange="settings.tempmail_domain=this.value">
-        </div>
-        <div class="config-row">
-          <div><div class="config-label">API Key</div><div class="config-desc">TempMail 的 API 密钥</div></div>
-          <input class="config-input" style="width:280px" value="${settings.tempmail_key||''}" placeholder="密钥" onchange="settings.tempmail_key=this.value">
-        </div>
-      `;
-    }
-
-    function renderProxy() {
-      return `
-        <div style="font-size:12px;color:var(--fg-muted);padding-bottom:8px;border-bottom:1px solid #f5f5f5;margin-bottom:16px">代理设置</div>
-        <div class="config-row" data-key="proxy_enabled">
-          <div><div class="config-label">启用代理</div><div class="config-desc">注册时使用代理绕过 WAF 限制</div></div>
-          <div class="toggle ${settings.proxy_enabled?'on':''}" onclick="this.classList.toggle('on');settings.proxy_enabled=this.classList.contains('on');document.getElementById('proxy-fields').style.display=settings.proxy_enabled?'':'none';markModified('proxy_enabled')"></div>
-        </div>
-        <div id="proxy-fields" style="${settings.proxy_enabled?'':'display:none'}">
-          <div class="config-row" data-key="proxy_url">
-            <div><div class="config-label">代理地址</div><div class="config-desc">格式: http://host:port 或 socks5://host:port</div></div>
-            <input class="config-input" style="width:280px;font-family:var(--font-mono)" data-key="proxy_url" value="${settings.proxy_url||''}" placeholder="http://host:port" oninput="onConfigChange(this,'proxy_url')">
-          </div>
-          <div class="config-row" data-key="proxy_username">
-            <div><div class="config-label">用户名</div><div class="config-desc">代理认证用户名（可选）</div></div>
-            <input class="config-input" data-key="proxy_username" value="${settings.proxy_username||''}" oninput="onConfigChange(this,'proxy_username')">
-          </div>
-          <div class="config-row" data-key="proxy_password">
-            <div><div class="config-label">密码</div><div class="config-desc">代理认证密码（可选）</div></div>
-            <div class="pwd-wrap">
-              <input type="password" class="config-input" style="padding-right:32px" data-key="proxy_password" value="${settings.proxy_password||''}" oninput="onConfigChange(this,'proxy_password')">
-              <button class="pwd-toggle" onclick="togglePwd(this)" type="button">
-                <svg class="eye-open" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                <svg class="eye-slash" style="display:none" viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-              </button>
-            </div>
-          </div>
-        </div>
-      `;
-    }
-
-    function renderKeys() {
-      return `
+    function renderKeysPanel() {
+      return `<div class="cfg-group" style="padding:16px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
           <span style="font-size:12px;color:var(--fg-muted)">${keys.length} 个密钥</span>
-          <div style="display:flex;gap:8px">
-            <button class="btn btn-danger" id="btn-batch-del-keys" onclick="batchDelKeys()" style="display:none">批量删除</button>
-            <button class="btn btn-primary" onclick="genKey()">生成新密钥</button>
-          </div>
+          <button class="btn btn-primary" onclick="genKey()">生成新密钥</button>
         </div>
-        <div style="font-size:12px;color:var(--fg-muted);margin-bottom:12px">OpenAI 兼容 API 的鉴权密钥。留空则禁用鉴权。</div>
+        <div style="font-size:11px;color:#9a9a9a;margin-bottom:12px">OpenAI 兼容 API 的鉴权密钥。留空则禁用鉴权。</div>
         ${keys.length === 0 ? '<div style="text-align:center;padding:32px;color:var(--fg-muted);font-size:12px">暂无密钥</div>' :
-          keys.map(k => `<div class="key-item">
-            <div style="display:flex;align-items:center;gap:10px">
-              <input type="checkbox" class="key-check" data-key="${k}" onchange="updateKeyBatchBtn()">
-              <code>${k}</code>
-            </div>
-            <div style="display:flex;align-items:center;gap:10px">
-              <button style="font-size:11px;color:#666;cursor:pointer" onclick="navigator.clipboard.writeText('${k}');showToast('已复制')">复制</button>
-              <button class="key-delete" onclick="delKey('${k}')">删除</button>
-            </div>
-          </div>`).join('')}
-      `;
+          keys.map(k => `<div class="key-item"><code>${k}</code><div style="display:flex;align-items:center;gap:10px"><button style="font-size:11px;color:#666;cursor:pointer" onclick="navigator.clipboard.writeText('${k}');showToast('已复制')">复制</button><button class="key-delete" onclick="delKey('${k}')">删除</button></div></div>`).join('')}
+      </div>`;
     }
 
-    // Save all
-    async function saveAll() {
-      const payload = {
-        engine_mode: settings.engine_mode,
-        max_inflight_per_account: settings.max_inflight_per_account,
-        default_stream: settings.default_stream,
-        admin_key: settings.admin_key,
-        auto_replenish: settings.auto_replenish,
-        replenish_target: settings.replenish_target,
-        moemail_domain: settings.moemail_domain,
-        moemail_key: settings.moemail_key,
-        tempmail_domain: settings.tempmail_domain,
-        tempmail_key: settings.tempmail_key,
-        proxy_enabled: settings.proxy_enabled,
-        proxy_url: settings.proxy_url,
-        proxy_username: settings.proxy_username,
-        proxy_password: settings.proxy_password,
-      };
-      // Model aliases (if on model tab)
-      const ta = document.getElementById('model-json');
-      if (ta) {
-        try { payload.model_aliases = JSON.parse(ta.value) }
-        catch { showToast('模型映射 JSON 格式错误'); return }
+    // 输入变更处理
+    function onInput(el, isNum) {
+      const key = el.dataset.key;
+      if (key === 'model_aliases') {
+        // JSON 字段特殊处理，不立即解析
+      } else {
+        settings[key] = isNum ? +el.value : el.value;
       }
-      await fetch('/api/admin/settings', { method:'PUT', headers:jsonHeaders(), body:JSON.stringify(payload) });
+      checkDirty(key);
+      checkShowIf(key);
+    }
+
+    function onToggle(el) {
+      const key = el.dataset.key;
+      settings[key] = el.checked;
+      checkDirty(key);
+      checkShowIf(key);
+    }
+
+    function checkShowIf(changedKey) {
+      // 重新渲染面板以处理 showIf 条件
+      const section = SCHEMA.find(s => s.id === currentTab);
+      if (!section || currentTab === 'keys') return;
+      for (const group of section.groups) {
+        for (const field of group.fields) {
+          if (field.showIf === changedKey) {
+            const row = document.querySelector(`.cfg-row[data-key="${field.key}"]`);
+            if (row) row.style.display = settings[changedKey] ? '' : 'none';
+          }
+        }
+      }
+    }
+
+    function checkDirty(key) {
+      const row = document.querySelector(`.cfg-row[data-key="${key}"]`);
+      if (row) {
+        const orig = configSnapshot[key];
+        const curr = settings[key];
+        if (String(curr) !== String(orig)) {
+          row.classList.add('modified');
+        } else {
+          row.classList.remove('modified');
+        }
+      }
+      // 全局 dirty 检测
+      dirty = JSON.stringify(settings) !== JSON.stringify(configSnapshot);
+      document.getElementById('btn-save').disabled = !dirty;
+      document.getElementById('save-bar').classList.toggle('visible', dirty);
+    }
+
+    // 密码切换
+    function togglePwd(btn) {
+      const input = btn.previousElementSibling;
+      if (!input) return;
+      input.type = input.type === 'password' ? 'text' : 'password';
+    }
+
+    // 保存
+    async function doSave() {
+      const payload = { ...settings };
+      // 解析 model_aliases JSON
+      const ta = document.querySelector('[data-key="model_aliases"]');
+      if (ta) {
+        try { payload.model_aliases = JSON.parse(ta.value); }
+        catch { showToast('模型映射 JSON 格式错误'); return; }
+      }
+      delete payload.app_url; // app_url 暂不持久化（后端未支持）
+      await fetch('/api/admin/settings', { method: 'PUT', headers: jsonHeaders(), body: JSON.stringify(payload) });
       configSnapshot = JSON.parse(JSON.stringify(settings));
-      clearAllModified();
+      dirty = false;
+      document.getElementById('btn-save').disabled = true;
+      document.getElementById('save-bar').classList.remove('visible');
+      document.querySelectorAll('.cfg-row.modified').forEach(r => r.classList.remove('modified'));
       showToast('已保存');
     }
 
-    // 重置配置
-    async function resetConfig() {
-      if (!confirm('确认将所有配置恢复为默认值？此操作不可撤销。')) return;
-      try {
-        const r = await fetch('/api/admin/settings/defaults', { headers: authHeaders() });
-        if (!r.ok) { showToast('获取默认配置失败', 5000); return; }
-        const defaults = await r.json();
-        settings = defaults;
-        configSnapshot = JSON.parse(JSON.stringify(defaults));
-        // 将默认值写入后端
-        await fetch('/api/admin/settings', { method:'PUT', headers:jsonHeaders(), body:JSON.stringify(defaults) });
-        renderContent();
-        showToast('已恢复默认');
-      } catch {
-        showToast('重置失败', 5000);
-      }
-    }
-
-    // 密码显示/隐藏切换
-    function togglePwd(btn) {
-      const wrap = btn.closest('.pwd-wrap');
-      const input = wrap.querySelector('input');
-      const eyeOpen = btn.querySelector('.eye-open');
-      const eyeSlash = btn.querySelector('.eye-slash');
-      if (input.type === 'password') {
-        input.type = 'text';
-        eyeOpen.style.display = 'none';
-        eyeSlash.style.display = '';
-      } else {
-        input.type = 'password';
-        eyeOpen.style.display = '';
-        eyeSlash.style.display = 'none';
-      }
-    }
-
-    // 配置修改检测
-    function onConfigChange(el, key, isNumber) {
-      settings[key] = isNumber ? +el.value : el.value;
-      markModified(key);
-    }
-
-    function markModified(key) {
-      const row = document.querySelector(`.config-row[data-key="${key}"]`);
-      if (!row) return;
-      const current = settings[key];
-      const original = configSnapshot[key];
-      if (String(current) !== String(original)) {
-        row.classList.add('modified');
-      } else {
-        row.classList.remove('modified');
-      }
-    }
-
-    function clearAllModified() {
-      document.querySelectorAll('.config-row.modified').forEach(r => r.classList.remove('modified'));
+    // 重置
+    async function doReset() {
+      if (dirty && !confirm('确认撤销所有未保存的更改？')) return;
+      settings = JSON.parse(JSON.stringify(configSnapshot));
+      dirty = false;
+      document.getElementById('btn-save').disabled = true;
+      document.getElementById('save-bar').classList.remove('visible');
+      renderPanel();
+      showToast('已撤销');
     }
 
     // Key management
     async function genKey() {
-      await fetch('/api/admin/keys', { method:'POST', headers:authHeaders() });
+      await fetch('/api/admin/keys', { method: 'POST', headers: authHeaders() });
       await fetchKeys();
-      renderContent();
+      renderPanel();
       showToast('已生成');
     }
     async function delKey(k) {
-      await fetch('/api/admin/keys/'+encodeURIComponent(k), { method:'DELETE', headers:authHeaders() });
+      await fetch('/api/admin/keys/' + encodeURIComponent(k), { method: 'DELETE', headers: authHeaders() });
       await fetchKeys();
-      renderContent();
+      renderPanel();
       showToast('已删除');
-    }
-    function updateKeyBatchBtn() {
-      const checked = document.querySelectorAll('.key-check:checked');
-      document.getElementById('btn-batch-del-keys').style.display = checked.length > 0 ? '' : 'none';
-    }
-    async function batchDelKeys() {
-      const checked = [...document.querySelectorAll('.key-check:checked')].map(cb => cb.dataset.key);
-      if (!confirm(`确认删除 ${checked.length} 个密钥?`)) return;
-      for (const k of checked) {
-        await fetch('/api/admin/keys/'+encodeURIComponent(k), { method:'DELETE', headers:authHeaders() });
-      }
-      await fetchKeys();
-      renderContent();
-      showToast(`已删除 ${checked.length} 个密钥`);
     }
 
     init();
