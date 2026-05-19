@@ -93,11 +93,15 @@ async def lifespan(app: FastAPI):
         tempmail_key = getattr(_settings, "TEMPMAIL_KEY", "") or ""
         tempmail_key = tempmail_key.strip()
 
-        # 严格优先级: MoeMail > TempMail > GuerrillaMail > Default
+        # 严格优先级: MoeMail > TempMail > GPTMail > VipMail > GuerrillaMail
         if moemail_domain and moemail_key:
             provider = "moemail"
         elif tempmail_domain and tempmail_key:
             provider = "tempmail"
+        elif getattr(_settings, "SMARTMAIL_KEY", ""):
+            provider = "gptmail"
+        elif getattr(_settings, "VIPMAIL_KEY", ""):
+            provider = "vipmail"
         else:
             provider = "guerrilla"
 

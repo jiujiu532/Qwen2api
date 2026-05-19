@@ -288,7 +288,7 @@ class TempMailClient:
 def get_mail_client(provider: str, settings):
     """
     根据 provider 字符串和 settings 返回对应的邮箱客户端实例。
-    provider: 'moemail' | 'tempmail'
+    provider: 'moemail' | 'tempmail' | 'gptmail' | 'vipmail' | 'guerrilla'
     """
     if provider == "moemail":
         domain = settings.MOEMAIL_DOMAIN
@@ -302,6 +302,16 @@ def get_mail_client(provider: str, settings):
         if not domain or not key:
             raise ValueError("TempMail 配置缺失：请在系统设置中填写域名和管理密钥。")
         return TempMailClient(domain, key)
+    elif provider == "gptmail":
+        key = getattr(settings, "SMARTMAIL_KEY", "")
+        return GPTMailClient(api_key=key)
+    elif provider == "vipmail":
+        key = getattr(settings, "VIPMAIL_KEY", "")
+        if not key:
+            raise ValueError("VipMail 配置缺失：请在系统设置中填写 API Key。")
+        return VipMailClient(api_key=key)
+    elif provider == "guerrilla":
+        return GuerrillaMailClient()
     else:
         raise ValueError(f"未知邮箱服务渠道: {provider}")
 
@@ -462,4 +472,107 @@ class GPTMailClient:
                     log.warning(f"[GPTMail] 轮询异常 [{poll + 1}/{max_polls}]: {e}")
                 _time.sleep(interval)
         log.warning(f"[GPTMail] 邮件查询已达 {max_polls} 次，放弃 (email={email})")
+        return None
+
+
+# ============================================================================
+# VipMail (YYDS Mail - vip.215.im) 临时邮箱服务客户端
+# ============================================================================
+
+class VipMailClient:
+    """
+    YYDS Mail (vip.215.im / maliapi.215.im) 临时邮箱服务客户端。
+    
+    API:
+    - 创建邮箱: POST /v1/accounts
+    - 获取邮件: GET /v1/messages?address=xxx
+    - 读取邮件: GET /v1/messages/{id}?address=xxx
+    """
+
+    BASE_URL = "https://maliapi.215.im/v1"
+
+    def __init__(self, api_key: str):
+        self._api_key = api_key
+
+    def create_address_sync(self, prefix: str = "") -> dict:
+        """同步创建临时邮箱。"""
+        headers = {"X-API-Key": self._api_key, "Content-Type": "application/json"}
+        body = {}
+        if prefix:
+            body["localPart"] = prefix
+        with httpx.Client(timeout=15) as client:
+            resp = client.post(f"{self.BASE_URL}/accounts", json=body, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+            if not data.get("success"):
+                raise Exception(f"[VipMail] 创建邮箱失败: {data.get('error', 'Unknown')}")
+            account = data.get("data", {})
+            return {
+                "address": account.get("address", ""),
+                "token": account.get("token", ""),
+                "provider": "vipmail",
+            }
+
+    def poll_for_activation_link(self, email: str, token: str = "", max_polls: int = 24, interval: int = 5) -> str | None:
+        """同步轮询 VipMail 收件箱，提取 Qwen 激活链接。"""
+        import time as _time
+        # 使用 API Key 鉴权
+        headers = {"X-API-Key": self._api_key}
+        log.debug(f"[VipMail] 开始轮询 (email={email}, 最多 {max_polls} 次, 间隔 {interval}s)")
+        with httpx.Client(timeout=15) as client:
+            for poll in range(max_polls):
+                try:
+                    resp = client.get(
+                        f"{self.BASE_URL}/messages",
+                        params={"address": email},
+                        headers=headers,
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        msgs = data.get("data", {}).get("messages", [])
+                        for msg in msgs:
+                            mail_id = msg.get("id", "")
+                            if not mail_id:
+                                continue
+                            # 获取邮件详情
+                            detail_resp = client.get(
+                                f"{self.BASE_URL}/messages/{mail_id}",
+                                params={"address": email},
+                                headers=headers,
+                            )
+                            if detail_resp.status_code != 200:
+                                continue
+                            detail = detail_resp.json()
+                            if not detail.get("success"):
+                                continue
+                            mail_data = detail.get("data", {})
+                            body_text = mail_data.get("text", "") or ""
+                            body_html = ""
+                            html_field = mail_data.get("html", "")
+                            if isinstance(html_field, list):
+                                body_html = " ".join(html_field)
+                            elif isinstance(html_field, str):
+                                body_html = html_field
+                            full_body = body_html or body_text
+                            # 查找激活链接
+                            m = re.search(
+                                r"href=[\"']([^\"']*https://chat\.qwen\.ai/api/v1/auths/activate[^\"']*)[\"']",
+                                full_body, re.IGNORECASE
+                            )
+                            if m:
+                                link = m.group(1).strip()
+                                log.info(f"[VipMail] 激活链接匹配成功: {link}")
+                                return link
+                            m2 = re.search(
+                                r"(https://chat\.qwen\.ai/api/v1/auths/activate[^\s<\"']+)",
+                                full_body, re.IGNORECASE
+                            )
+                            if m2:
+                                link = m2.group(1).strip()
+                                log.info(f"[VipMail] 激活链接匹配成功(文本): {link}")
+                                return link
+                except Exception as e:
+                    log.warning(f"[VipMail] 轮询异常 [{poll + 1}/{max_polls}]: {e}")
+                _time.sleep(interval)
+        log.warning(f"[VipMail] 邮件查询已达 {max_polls} 次，放弃 (email={email})")
         return None
