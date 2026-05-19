@@ -2,7 +2,7 @@ import asyncio
 import logging
 import sys
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
@@ -172,6 +172,28 @@ async def admin_register_page():
 async def admin_root():
     from fastapi.responses import RedirectResponse
     return RedirectResponse("/admin/login")
+
+# ── WebUI 路由 ──────────────────────────────────────────────────────────────
+WEBUI_DIR = STATICS_DIR / "webui"
+
+@app.get("/webui", include_in_schema=False)
+async def webui_root():
+    from fastapi.responses import RedirectResponse
+    if not settings.WEBUI_ENABLED:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return RedirectResponse("/webui/login")
+
+@app.get("/webui/login", include_in_schema=False)
+async def webui_login_page():
+    if not settings.WEBUI_ENABLED:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return FileResponse(WEBUI_DIR / "login.html")
+
+@app.get("/webui/chat", include_in_schema=False)
+async def webui_chat_page():
+    if not settings.WEBUI_ENABLED:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return FileResponse(WEBUI_DIR / "chat.html")
 
 if STATICS_DIR.exists():
     app.mount("/statics", StaticFiles(directory=str(STATICS_DIR)), name="statics")
