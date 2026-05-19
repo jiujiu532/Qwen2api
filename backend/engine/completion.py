@@ -262,6 +262,7 @@ async def _stream_no_tools(
             sent_role = False
             streamed_len = 0
             thought_sent = False  # 标记是否已发过 thought 内容
+            reasoning_sent_len = 0  # 已发送的 reasoning 字符数（用于去重累积式推送）
 
             async for item in _stream_items_with_keepalive(
                 client, model, current_prompt, has_custom_tools=False,
@@ -294,8 +295,15 @@ async def _stream_no_tools(
                         continue
                     if phase == "thought":
                         thought_sent = True
-                    yield f"data: {json.dumps({'id': completion_id, 'object': 'chat.completion.chunk', 'created': created, 'model': model_name, 'choices': [{'index': 0, 'delta': {'reasoning_content': reasoning or content}, 'finish_reason': None}]}, ensure_ascii=False)}\n\n"
-                    streamed_len += len(reasoning or content)
+                    # 去重：如果上游发的是累积全文，只取增量部分
+                    full_reasoning = reasoning or content
+                    if len(full_reasoning) > reasoning_sent_len:
+                        delta_reasoning = full_reasoning[reasoning_sent_len:]
+                        reasoning_sent_len = len(full_reasoning)
+                    else:
+                        continue  # 没有新内容，跳过
+                    yield f"data: {json.dumps({'id': completion_id, 'object': 'chat.completion.chunk', 'created': created, 'model': model_name, 'choices': [{'index': 0, 'delta': {'reasoning_content': delta_reasoning}, 'finish_reason': None}]}, ensure_ascii=False)}\n\n"
+                    streamed_len += len(delta_reasoning)
                     continue
 
                 # 正文内容
