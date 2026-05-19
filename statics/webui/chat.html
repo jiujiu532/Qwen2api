@@ -272,16 +272,27 @@
       document.getElementById('send-btn').disabled = true;
       const model = document.getElementById('model-select').value;
       const key = getKey();
+      if (!key) {
+        messages[messages.length - 1] = { role: 'assistant', content: '错误: 未登录，请刷新页面重新登录' };
+        messages.pop(); // 移除多余的
+        renderThread();
+        isStreaming = false;
+        document.getElementById('send-btn').disabled = false;
+        location.href = '/webui/login';
+        return;
+      }
 
       messages.push({ role: 'assistant', content: '' });
       renderThread();
 
       try {
+        console.log('[WebChat] Sending to /v1/chat/completions, model:', model, 'messages:', messages.slice(0, -1).length);
         const resp = await fetch('/v1/chat/completions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
           body: JSON.stringify({ model, messages: messages.slice(0, -1), stream: true })
         });
+        console.log('[WebChat] Response status:', resp.status);
         if (!resp.ok) {
           const errText = await resp.text();
           messages[messages.length - 1].content = '错误 (' + resp.status + '): ' + errText.slice(0, 200);
@@ -309,6 +320,7 @@
           }
         }
       } catch (e) {
+        console.error('[WebChat] Fetch error:', e);
         messages[messages.length - 1].content = '网络错误: ' + e.message;
         renderThread();
       }
