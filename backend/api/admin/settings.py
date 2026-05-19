@@ -45,6 +45,8 @@ async def get_settings(_=Depends(_require_admin)):
         "timeout_image": getattr(settings, "TIMEOUT_IMAGE", 60),
         "timeout_stream_idle": getattr(settings, "TIMEOUT_STREAM_IDLE", 60),
         "timeout_register": getattr(settings, "TIMEOUT_REGISTER", 60),
+        "webui_enabled": getattr(settings, "WEBUI_ENABLED", True),
+        "webui_key": getattr(settings, "WEBUI_KEY", ""),
     }
 
 
@@ -81,6 +83,8 @@ async def get_default_settings(_=Depends(_require_admin)):
         "timeout_image": 60,
         "timeout_stream_idle": 60,
         "timeout_register": 60,
+        "webui_enabled": True,
+        "webui_key": "",
     }
 
 
@@ -152,6 +156,10 @@ async def update_settings(request: Request, _=Depends(_require_admin)):
         settings.TIMEOUT_STREAM_IDLE = max(1, int(body["timeout_stream_idle"]))
     if "timeout_register" in body:
         settings.TIMEOUT_REGISTER = max(1, int(body["timeout_register"]))
+    if "webui_enabled" in body:
+        settings.WEBUI_ENABLED = bool(body["webui_enabled"])
+    if "webui_key" in body:
+        settings.WEBUI_KEY = str(body["webui_key"]).strip()
 
     save_runtime_settings()
     return {"ok": True}

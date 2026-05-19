@@ -106,6 +106,8 @@
               { key: 'app_url', label: 'APP 访问地址', type: 'text', desc: '应用对外提供服务的根 URL，格式如 https://your-domain.com。' },
               { key: 'admin_key', label: 'APP 访问密码', type: 'password', desc: '管理后台鉴权密码。修改后已有 Session 将立即失效，需重新登录。' },
               { key: 'default_stream', label: '默认流式回复', type: 'bool', desc: '客户端未传 stream 字段时的默认行为。' },
+              { key: 'webui_enabled', label: '启用 WebUI', type: 'bool', desc: '开放 WebUI 功能入口。关闭后相关路由将返回 404。' },
+              { key: 'webui_key', label: 'WebUI 访问密码', type: 'password', desc: 'WebUI 的访问鉴权密码。配置后访问时必须提供。', showIf: 'webui_enabled' },
             ]
           },
           {

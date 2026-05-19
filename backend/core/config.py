@@ -85,6 +85,10 @@ class Settings(BaseSettings):
     TIMEOUT_STREAM_IDLE: int = int(os.getenv("TIMEOUT_STREAM_IDLE", 60))
     TIMEOUT_REGISTER: int = int(os.getenv("TIMEOUT_REGISTER", 60))
 
+    # WebUI 配置
+    WEBUI_ENABLED: bool = os.getenv("WEBUI_ENABLED", "true").lower() in ("1", "true", "yes", "on")
+    WEBUI_KEY: str = os.getenv("WEBUI_KEY", "")
+
 
     # 数据文件路径
     ACCOUNTS_FILE: str = os.getenv("ACCOUNTS_FILE", str(DATA_DIR / "accounts.json"))
@@ -131,6 +135,7 @@ _PERSIST_KEYS = [
     "PROXY_ENABLED", "PROXY_URL", "PROXY_USERNAME", "PROXY_PASSWORD",
     "LOG_LEVEL", "LOG_MAX_DAYS",
     "TIMEOUT_CHAT", "TIMEOUT_IMAGE", "TIMEOUT_STREAM_IDLE", "TIMEOUT_REGISTER",
+    "WEBUI_ENABLED", "WEBUI_KEY",
 ]
 
 def save_runtime_settings():
