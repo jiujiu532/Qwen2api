@@ -68,12 +68,14 @@ class HttpxEngine:
             return {"status": 0, "body": str(e)}
 
     async def fetch_chat(self, token: str, chat_id: str, payload: dict, buffered: bool = False):
-        """Stream Qwen SSE via curl_cffi -- 使用 aiter_content 逐块读取实现真流式。
+        """Stream Qwen SSE via curl_cffi -- 真流式透传。
 
-        核心改进：用 aiter_content() 替代 aiter_lines()。
-        aiter_lines() 内部会缓冲直到遇到完整行，在某些情况下会导致大量数据一次性释放。
-        aiter_content() 在每个 TCP 数据包到达时立即 yield 原始字节，手动按换行分割，
-        确保 SSE 事件在上游发出后立即透传给下游客户端。
+        关键设计：
+        1. Accept-Encoding: identity — 禁用压缩，避免 Brotli/gzip 解压缓冲
+           Qwen 默认返回 br 压缩流，解压器需要积累数据块才能释放，导致 answer 阶段
+           内容被缓冲后一次性释放。禁用压缩后每个 SSE 事件到达即可立即读取。
+        2. aiter_content() — 逐 TCP 包读取，不等待完整行
+        3. 手动按换行分割 — 确保每个 SSE 事件立即透传
         """
         from curl_cffi.requests import AsyncSession
         url = self.base_url + f"/api/v2/chat/completions?chat_id={chat_id}"
@@ -81,9 +83,11 @@ class HttpxEngine:
             **self._auth_headers(token),
             "Content-Type": "application/json",
             "Accept": "text/event-stream",
+            "Accept-Encoding": "identity",  # 禁用压缩，确保流式即时到达
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Origin": "https://chat.qwen.ai",
             "Referer": "https://chat.qwen.ai/",
+            "X-Accel-Buffering": "no",  # 告知上游 nginx 不要缓冲
         }
         body_bytes = json.dumps(payload, ensure_ascii=False).encode()
 
@@ -103,15 +107,13 @@ class HttpxEngine:
                     await session.close()
                     return
 
-                # 使用 aiter_content 逐块读取，手动按换行分割
-                # 这样每个 TCP 数据包到达时立即处理，不会被 aiter_lines 的内部缓冲阻塞
+                # 逐块读取，手动按换行分割，确保即时透传
                 line_buffer = ""
                 async for chunk in response.aiter_content():
                     if not chunk:
                         continue
                     text = chunk.decode("utf-8", errors="replace") if isinstance(chunk, bytes) else chunk
                     line_buffer += text
-                    # 按换行符分割，逐行 yield
                     while "\n" in line_buffer:
                         line, line_buffer = line_buffer.split("\n", 1)
                         line = line.strip()
