@@ -3,108 +3,126 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>qwen2api - WebChat</title>
+  <title>qwen2api - Web Chat</title>
   <link href="https://cdn.jsdelivr.net/npm/geist@1.0.0/dist/fonts/geist-sans/style.css" rel="stylesheet">
   <link href="/statics/css/app.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <style>
-    body{background:var(--bg);overflow:hidden}
-    .chat-layout{display:flex;height:100vh;padding-top:54px}
+    html,body{height:100%;overflow:hidden;background:#FAF9F5}
+    .webui-layout{display:flex;height:100vh}
 
     /* Sidebar */
-    .chat-sidebar{width:260px;border-right:1px solid var(--border);background:var(--bg-card);display:flex;flex-direction:column;flex-shrink:0;transition:margin-left .2s}
-    .chat-sidebar.collapsed{margin-left:-260px}
-    .sidebar-hd{padding:12px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #f5f5f5}
-    .sidebar-title{font-size:13px;font-weight:600}
-    .sidebar-btn{width:28px;height:28px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;color:#888}
-    .sidebar-btn:hover{background:#f3f3f3;color:#333}
-    .sidebar-btn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8}
-    .session-list{flex:1;overflow-y:auto;padding:8px}
-    .session-item{padding:8px 12px;border-radius:8px;font-size:12px;color:#555;cursor:pointer;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:background .1s}
-    .session-item:hover{background:#f5f5f5}
-    .session-item.active{background:#f0ede6;font-weight:600;color:#111}
+    .webui-sidebar{width:220px;background:#fff;border-right:1px solid #f0f0f0;display:flex;flex-direction:column;flex-shrink:0;transition:margin-left .25s ease}
+    .webui-sidebar.collapsed{margin-left:-220px}
+    .webui-sidebar-hd{height:52px;padding:0 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #f5f5f5}
+    .webui-sidebar-title{font-size:14px;font-weight:700;color:#111}
+    .webui-sidebar-actions{display:flex;gap:6px}
+    .webui-sidebar-btn{width:26px;height:26px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;color:#999;transition:background .1s,color .1s}
+    .webui-sidebar-btn:hover{background:#f3f3f3;color:#333}
+    .webui-sidebar-btn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8}
+    .webui-sessions{flex:1;overflow-y:auto;padding:8px 10px}
+    .webui-session{padding:7px 10px;border-radius:8px;font-size:12px;color:#666;cursor:pointer;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:background .1s}
+    .webui-session:hover{background:#f7f6f3}
+    .webui-session.active{background:#f0ede6;color:#111;font-weight:600}
 
-    /* Main area */
-    .chat-main{flex:1;display:flex;flex-direction:column;min-width:0}
-    .chat-thread{flex:1;overflow-y:auto;padding:24px 28px;max-width:800px;margin:0 auto;width:100%}
-    .chat-empty{display:flex;align-items:center;justify-content:center;height:100%;color:var(--fg-muted);font-size:14px}
+    /* Workspace */
+    .webui-workspace{flex:1;display:flex;flex-direction:column;min-width:0;position:relative}
+
+    /* Thread */
+    .webui-thread{flex:1;overflow-y:auto;display:flex;flex-direction:column}
+    .webui-thread-inner{max-width:720px;width:100%;margin:0 auto;padding:40px 24px 24px;flex:1;display:flex;flex-direction:column}
+
+    /* Empty state */
+    .webui-empty{flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column}
+    .webui-empty-title{font-size:22px;font-weight:700;color:#111;margin-bottom:6px}
+    .webui-empty-text{font-size:13px;color:#999}
 
     /* Messages */
-    .msg{margin-bottom:20px}
-    .msg-role{font-size:11px;font-weight:600;color:#999;margin-bottom:4px;text-transform:uppercase}
-    .msg-body{font-size:14px;line-height:1.7;color:#222}
-    .msg-body p{margin:0 0 8px}
-    .msg-body pre{background:#f8f8f8;border-radius:8px;padding:12px;overflow-x:auto;font-size:12px;font-family:var(--font-mono);margin:8px 0}
-    .msg-body code{font-family:var(--font-mono);font-size:12px;background:#f5f5f5;padding:1px 4px;border-radius:3px}
-    .msg-body pre code{background:none;padding:0}
-    .msg-body img{max-width:100%;border-radius:8px;margin:8px 0}
-    .msg-user .msg-body{background:#f5f3ef;padding:10px 14px;border-radius:12px;display:inline-block;max-width:85%}
-    .msg-user{text-align:right}
-    .msg-user .msg-role{text-align:right}
+    .webui-msg{margin-bottom:24px}
+    .webui-msg-user{display:flex;justify-content:flex-end}
+    .webui-msg-user .webui-bubble{background:#f0ede6;padding:10px 14px;border-radius:14px 14px 4px 14px;max-width:80%;font-size:14px;line-height:1.6;color:#222}
+    .webui-msg-assistant .webui-bubble{font-size:14px;line-height:1.7;color:#222}
+    .webui-bubble p{margin:0 0 8px}
+    .webui-bubble p:last-child{margin:0}
+    .webui-bubble pre{background:#f8f8f8;border-radius:8px;padding:12px;overflow-x:auto;font-size:12px;font-family:var(--font-mono);margin:8px 0}
+    .webui-bubble code{font-family:var(--font-mono);font-size:12px;background:#f5f5f5;padding:1px 4px;border-radius:3px}
+    .webui-bubble pre code{background:none;padding:0}
+    .webui-bubble img{max-width:100%;border-radius:8px;margin:8px 0}
 
-    /* Composer */
-    .chat-composer{padding:16px 28px 20px;max-width:800px;margin:0 auto;width:100%}
-    .composer-shell{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:12px;box-shadow:var(--shadow-sm)}
-    .composer-textarea{width:100%;min-height:44px;max-height:160px;resize:none;border:none;outline:none;font-size:14px;line-height:1.5;font-family:var(--font-sans);background:transparent}
-    .composer-textarea::placeholder{color:var(--fg-subtle)}
-    .composer-bar{display:flex;align-items:center;justify-content:space-between;margin-top:8px}
-    .composer-model{height:28px;padding:0 10px;border-radius:999px;font-size:11px;border:1px solid var(--border);background:#fafafa;color:#666}
-    .composer-send{height:32px;padding:0 16px;border-radius:999px;background:#111;color:#fff;font-size:13px;font-weight:600;transition:opacity .15s}
-    .composer-send:hover{opacity:.85}
-    .composer-send:disabled{opacity:.4;cursor:not-allowed}
+    /* Composer - grok2api style */
+    .webui-composer{padding:0 24px 24px;max-width:720px;width:100%;margin:0 auto}
+    .webui-input-bar{display:flex;align-items:center;gap:0;background:#f5f3ef;border-radius:999px;padding:6px 6px 6px 16px;border:1px solid transparent;transition:border-color .15s,background .15s}
+    .webui-input-bar:focus-within{background:#fff;border-color:#e5e5e5}
+    .webui-upload-btn{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#888;flex-shrink:0;margin-right:8px}
+    .webui-upload-btn:hover{color:#333}
+    .webui-upload-btn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8}
+    .webui-prompt{flex:1;border:none;outline:none;background:transparent;font-size:14px;font-family:var(--font-sans);resize:none;min-height:24px;max-height:120px;line-height:1.5;padding:4px 0}
+    .webui-prompt::placeholder{color:#aaa}
+    .webui-model-select{height:28px;padding:0 24px 0 10px;border-radius:999px;font-size:11px;border:none;background:transparent;color:#666;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24'%3E%3Cpath d='M6 9l6 6 6-6' stroke='%23888' stroke-width='2' fill='none'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 6px center;cursor:pointer;font-weight:500;white-space:nowrap}
+    .webui-send-btn{width:32px;height:32px;border-radius:50%;background:#111;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:opacity .15s}
+    .webui-send-btn:hover{opacity:.8}
+    .webui-send-btn:disabled{opacity:.3;cursor:not-allowed}
+    .webui-send-btn svg{width:14px;height:14px;stroke:#fff;fill:none;stroke-width:2.5}
 
-    /* Typing indicator */
-    .typing-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#999;margin:0 2px;animation:blink 1.4s infinite}
-    .typing-dot:nth-child(2){animation-delay:.2s}
-    .typing-dot:nth-child(3){animation-delay:.4s}
-    @keyframes blink{0%,80%,100%{opacity:.3}40%{opacity:1}}
+    /* Footer */
+    .webui-footer{text-align:center;padding:6px 0 12px;font-size:10px;color:#ccc}
+
+    /* Typing */
+    .typing-dots span{display:inline-block;width:5px;height:5px;border-radius:50%;background:#bbb;margin:0 2px;animation:tdot 1.4s infinite}
+    .typing-dots span:nth-child(2){animation-delay:.2s}
+    .typing-dots span:nth-child(3){animation-delay:.4s}
+    @keyframes tdot{0%,80%,100%{opacity:.3}40%{opacity:1}}
 
     @media(max-width:768px){
-      .chat-sidebar{position:fixed;left:0;top:54px;bottom:0;z-index:50;box-shadow:4px 0 16px rgba(0,0,0,.08)}
-      .chat-sidebar.collapsed{margin-left:-260px}
+      .webui-sidebar{position:fixed;left:0;top:0;bottom:0;z-index:100;box-shadow:4px 0 20px rgba(0,0,0,.08)}
+      .webui-sidebar.collapsed{margin-left:-220px}
+      .webui-composer{padding:0 12px 16px}
     }
   </style>
 </head>
 <body>
-  <header class="admin-header" id="admin-header"></header>
-  <div class="chat-layout">
+  <div class="webui-layout">
     <!-- Sidebar -->
-    <aside class="chat-sidebar" id="sidebar">
-      <div class="sidebar-hd">
-        <span class="sidebar-title">Chats</span>
-        <div style="display:flex;gap:4px">
-          <button class="sidebar-btn" onclick="newChat()" title="新对话"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg></button>
-          <button class="sidebar-btn" onclick="toggleSidebar()" title="收起"><svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="3.5"/><path d="M10 5v14"/></svg></button>
+    <aside class="webui-sidebar" id="sidebar">
+      <div class="webui-sidebar-hd">
+        <span class="webui-sidebar-title">Chats</span>
+        <div class="webui-sidebar-actions">
+          <button class="webui-sidebar-btn" onclick="newChat()" title="新对话"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg></button>
+          <button class="webui-sidebar-btn" onclick="toggleSidebar()" title="收起侧栏"><svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="3.5"/><path d="M10 5v14"/></svg></button>
         </div>
       </div>
-      <div class="session-list" id="session-list"></div>
+      <div class="webui-sessions" id="session-list"></div>
     </aside>
 
-    <!-- Main -->
-    <div class="chat-main">
-      <div class="chat-thread" id="thread">
-        <div class="chat-empty" id="empty-state">输入一条消息开始新的会话</div>
-      </div>
-      <div class="chat-composer">
-        <div class="composer-shell">
-          <textarea id="prompt" class="composer-textarea" placeholder="输入你的问题，Enter 发送，Shift+Enter 换行" rows="1"></textarea>
-          <div class="composer-bar">
-            <select id="model-select" class="composer-model">
-              <option value="qwen3.6-plus">qwen3.6-plus</option>
-              <option value="qwen3.6-max-preview">qwen3.6-max-preview</option>
-              <option value="qwen3.6-27b">qwen3.6-27b</option>
-              <option value="gpt-4o">gpt-4o</option>
-              <option value="claude-3-5-sonnet-latest">claude-sonnet</option>
-            </select>
-            <button id="send-btn" class="composer-send" onclick="sendMessage()">发送</button>
+    <!-- Workspace -->
+    <section class="webui-workspace">
+      <div class="webui-thread" id="thread">
+        <div class="webui-thread-inner" id="thread-inner">
+          <div class="webui-empty" id="empty-state">
+            <div class="webui-empty-title">Web Chat</div>
+            <div class="webui-empty-text">输入一条消息开始新的会话。</div>
           </div>
         </div>
       </div>
-    </div>
+
+      <div class="webui-composer">
+        <div class="webui-input-bar">
+          <button class="webui-upload-btn" title="上传文件"><svg viewBox="0 0 24 24"><path d="M12 16V5M8 9l4-4 4 4M5 19h14" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <textarea id="prompt" class="webui-prompt" placeholder="输入你的问题，Enter 发送，Shift+Enter 换行" rows="1"></textarea>
+          <select id="model-select" class="webui-model-select"></select>
+          <button id="send-btn" class="webui-send-btn" onclick="sendMessage()" title="发送">
+            <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="webui-footer">qwen2api - Web Chat</div>
+    </section>
   </div>
 
-  <script src="/statics/js/common.js"></script>
   <script>
+    // 鉴权
+    function getWebUIKey() { return localStorage.getItem('qwen2api_webui_key') || '' }
+
     // 状态
     let sessions = JSON.parse(localStorage.getItem('qwen2api_sessions') || '[]');
     let currentSessionId = null;
@@ -112,164 +130,125 @@
     let isStreaming = false;
 
     async function init() {
-      // WebUI 鉴权：用 webui_key 或 admin_key
-      const key = localStorage.getItem('qwen2api_webui_key') || getKey();
+      const key = getWebUIKey();
       if (!key) { location.href = '/webui/login'; return; }
-      renderHeader('webui');
+      await loadModels();
       renderSessions();
-      if (sessions.length > 0) {
-        loadSession(sessions[0].id);
-      }
+      if (sessions.length > 0) loadSession(sessions[0].id);
       setupInput();
     }
 
-    function renderHeader(active) {
-      const header = document.getElementById('admin-header');
-      if (!header) return;
-      header.innerHTML = `
-        <div class="admin-header-inner">
-          <div><span class="admin-brand">qwen2api</span></div>
-          <nav class="admin-nav">
-            <a href="/admin/accounts">账户管理</a>
-            <a href="/admin/config">配置管理</a>
-            <a href="/admin/register">扩容中心</a>
-            <a href="/webui/chat" class="active">WebChat</a>
-          </nav>
-          <div class="admin-header-right">
-            <span class="admin-version">v3.0</span>
-            <button class="admin-logout" onclick="logout()">登出</button>
-          </div>
-        </div>
-      `;
+    // 从后端获取真实可用模型列表
+    async function loadModels() {
+      const select = document.getElementById('model-select');
+      try {
+        const r = await fetch('/v1/models', { headers: { 'Authorization': 'Bearer ' + getWebUIKey() } });
+        if (r.ok) {
+          const d = await r.json();
+          const models = (d.data || []).map(m => m.id).sort();
+          select.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join('');
+          // 默认选中 qwen3.6-plus
+          if (models.includes('qwen3.6-plus')) select.value = 'qwen3.6-plus';
+          return;
+        }
+      } catch {}
+      // fallback: 内置模型列表
+      const fallback = ['qwen3.6-plus','qwen3.6-plus-thinking','qwen3.6-plus-nothinking','qwen3.6-max-preview','qwen3.6-max-preview-thinking','qwen3.6-max-preview-nothinking','qwen3.6-27b','qwen3.6-27b-thinking','qwen3.6-27b-nothinking','qwen3.7-max-preview','qwen3.7-plus-preview'];
+      select.innerHTML = fallback.map(m => `<option value="${m}">${m}</option>`).join('');
     }
 
     // 会话管理
     function newChat() {
       const id = 'chat_' + Date.now();
-      const session = { id, title: '新对话', messages: [], created: Date.now() };
-      sessions.unshift(session);
+      sessions.unshift({ id, title: '新对话', messages: [], created: Date.now() });
       saveSessions();
       loadSession(id);
     }
 
     function loadSession(id) {
       currentSessionId = id;
-      const session = sessions.find(s => s.id === id);
-      messages = session ? session.messages : [];
+      const s = sessions.find(x => x.id === id);
+      messages = s ? [...s.messages] : [];
       renderSessions();
       renderThread();
     }
 
-    function saveSessions() {
-      localStorage.setItem('qwen2api_sessions', JSON.stringify(sessions));
-    }
+    function saveSessions() { localStorage.setItem('qwen2api_sessions', JSON.stringify(sessions)); }
 
     function saveCurrentSession() {
-      const session = sessions.find(s => s.id === currentSessionId);
-      if (session) {
-        session.messages = messages;
-        // 用第一条用户消息作为标题
-        const firstUser = messages.find(m => m.role === 'user');
-        if (firstUser) session.title = firstUser.content.slice(0, 30);
-        saveSessions();
-      }
-    }
-
-    function deleteSession(id, e) {
-      e.stopPropagation();
-      sessions = sessions.filter(s => s.id !== id);
+      const s = sessions.find(x => x.id === currentSessionId);
+      if (!s) return;
+      s.messages = [...messages];
+      const first = messages.find(m => m.role === 'user');
+      if (first) s.title = first.content.slice(0, 28);
       saveSessions();
-      if (currentSessionId === id) {
-        if (sessions.length > 0) loadSession(sessions[0].id);
-        else { currentSessionId = null; messages = []; renderThread(); }
-      }
-      renderSessions();
     }
 
     function renderSessions() {
       const el = document.getElementById('session-list');
-      if (sessions.length === 0) {
-        el.innerHTML = '<div style="padding:20px;text-align:center;font-size:11px;color:#999">暂无会话</div>';
-        return;
-      }
+      if (sessions.length === 0) { el.innerHTML = '<div style="padding:16px;text-align:center;font-size:11px;color:#bbb">暂无会话</div>'; return; }
       el.innerHTML = sessions.map(s =>
-        `<div class="session-item ${s.id===currentSessionId?'active':''}" onclick="loadSession('${s.id}')">
-          ${s.title || '新对话'}
-        </div>`
+        `<div class="webui-session ${s.id===currentSessionId?'active':''}" onclick="loadSession('${s.id}')">${esc(s.title||'新对话')}</div>`
       ).join('');
     }
 
     // 消息渲染
     function renderThread() {
-      const thread = document.getElementById('thread');
+      const inner = document.getElementById('thread-inner');
       const empty = document.getElementById('empty-state');
       if (messages.length === 0) {
+        inner.innerHTML = '';
+        inner.appendChild(empty);
         empty.style.display = 'flex';
-        thread.innerHTML = '';
-        thread.appendChild(empty);
         return;
       }
       empty.style.display = 'none';
-      thread.innerHTML = messages.map(m => {
-        const cls = m.role === 'user' ? 'msg msg-user' : 'msg msg-assistant';
-        const body = m.role === 'user' ? escapeHtml(m.content) : renderMarkdown(m.content);
-        return `<div class="${cls}"><div class="msg-role">${m.role}</div><div class="msg-body">${body}</div></div>`;
+      inner.innerHTML = messages.map(m => {
+        if (m.role === 'user') {
+          return `<div class="webui-msg webui-msg-user"><div class="webui-bubble">${esc(m.content)}</div></div>`;
+        } else {
+          return `<div class="webui-msg webui-msg-assistant"><div class="webui-bubble">${renderMd(m.content)}</div></div>`;
+        }
       }).join('');
+      // 滚动到底部
+      const thread = document.getElementById('thread');
       thread.scrollTop = thread.scrollHeight;
     }
 
-    function renderMarkdown(text) {
-      if (!text) return '';
-      try { return marked.parse(text); }
-      catch { return escapeHtml(text); }
+    function renderMd(text) {
+      if (!text) return '<span class="typing-dots"><span></span><span></span><span></span></span>';
+      try { return marked.parse(text); } catch { return esc(text); }
     }
 
-    function escapeHtml(s) {
-      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    }
+    function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-    // 输入处理
+    // 输入
     function setupInput() {
       const ta = document.getElementById('prompt');
-      ta.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-          e.preventDefault();
-          sendMessage();
-        }
-      });
-      // 自动调整高度
-      ta.addEventListener('input', () => {
-        ta.style.height = 'auto';
-        ta.style.height = Math.min(ta.scrollHeight, 160) + 'px';
-      });
+      ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
+      ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 120) + 'px'; });
     }
 
-    // 发送消息
+    // 发送
     async function sendMessage() {
       const ta = document.getElementById('prompt');
       const text = ta.value.trim();
       if (!text || isStreaming) return;
-
-      // 如果没有当前会话，创建一个
       if (!currentSessionId) newChat();
 
       messages.push({ role: 'user', content: text });
-      ta.value = '';
-      ta.style.height = 'auto';
+      ta.value = ''; ta.style.height = 'auto';
       renderThread();
       saveCurrentSession();
 
-      // 流式请求
       isStreaming = true;
       document.getElementById('send-btn').disabled = true;
-
       const model = document.getElementById('model-select').value;
-      const key = localStorage.getItem('qwen2api_webui_key') || getKey();
+      const key = getWebUIKey();
 
-      // 添加 assistant 占位
+      // assistant 占位
       messages.push({ role: 'assistant', content: '' });
       renderThread();
-      appendTypingIndicator();
 
       try {
         const resp = await fetch('/v1/chat/completions', {
@@ -280,38 +259,30 @@
 
         if (!resp.ok) {
           const err = await resp.text();
-          messages[messages.length - 1].content = '请求失败: ' + (err || resp.status);
-          renderThread();
-          saveCurrentSession();
-          isStreaming = false;
-          document.getElementById('send-btn').disabled = false;
+          messages[messages.length - 1].content = '错误: ' + (err || resp.status);
+          renderThread(); saveCurrentSession();
+          isStreaming = false; document.getElementById('send-btn').disabled = false;
           return;
         }
 
         const reader = resp.body.getReader();
         const decoder = new TextDecoder();
-        let buffer = '';
-        let assistantContent = '';
+        let buf = '', content = '';
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop();
-
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split('\n');
+          buf = lines.pop();
           for (const line of lines) {
             if (!line.startsWith('data: ')) continue;
-            const data = line.slice(6).trim();
-            if (data === '[DONE]') continue;
+            const d = line.slice(6).trim();
+            if (d === '[DONE]') continue;
             try {
-              const json = JSON.parse(data);
-              const delta = json.choices?.[0]?.delta?.content || '';
-              if (delta) {
-                assistantContent += delta;
-                messages[messages.length - 1].content = assistantContent;
-                renderThread();
-              }
+              const j = JSON.parse(d);
+              const delta = j.choices?.[0]?.delta?.content || '';
+              if (delta) { content += delta; messages[messages.length - 1].content = content; renderThread(); }
             } catch {}
           }
         }
@@ -320,30 +291,12 @@
         renderThread();
       }
 
-      removeTypingIndicator();
       saveCurrentSession();
       isStreaming = false;
       document.getElementById('send-btn').disabled = false;
     }
 
-    function appendTypingIndicator() {
-      const thread = document.getElementById('thread');
-      const indicator = document.createElement('div');
-      indicator.id = 'typing';
-      indicator.innerHTML = '<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>';
-      indicator.style.padding = '8px 0';
-      thread.appendChild(indicator);
-      thread.scrollTop = thread.scrollHeight;
-    }
-
-    function removeTypingIndicator() {
-      const el = document.getElementById('typing');
-      if (el) el.remove();
-    }
-
-    function toggleSidebar() {
-      document.getElementById('sidebar').classList.toggle('collapsed');
-    }
+    function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
 
     init();
   </script>

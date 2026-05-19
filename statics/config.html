@@ -106,7 +106,7 @@
               { key: 'app_url', label: 'APP 访问地址', type: 'text', desc: '应用对外提供服务的根 URL，格式如 https://your-domain.com。' },
               { key: 'admin_key', label: 'APP 访问密码', type: 'password', desc: '管理后台鉴权密码。修改后已有 Session 将立即失效，需重新登录。' },
               { key: 'default_stream', label: '默认流式回复', type: 'bool', desc: '客户端未传 stream 字段时的默认行为。' },
-              { key: 'webui_enabled', label: '启用 WebUI', type: 'bool', desc: '开放 WebUI 功能入口。关闭后相关路由将返回 404。' },
+              { key: 'webui_enabled', label: '启用 WebUI', type: 'bool', desc: '开放 WebUI 功能入口。关闭后相关路由将返回 404。', link: '/webui/chat' },
               { key: 'webui_key', label: 'WebUI 访问密码', type: 'password', desc: 'WebUI 的访问鉴权密码。配置后访问时必须提供。', showIf: 'webui_enabled' },
             ]
           },
@@ -241,7 +241,8 @@
         for (const field of group.fields) {
           const hidden = field.showIf && !settings[field.showIf];
           html += `<div class="cfg-row" data-key="${field.key}" style="${hidden?'display:none':''}">`;
-          html += `<div><div class="cfg-label">${field.label}</div><div class="cfg-desc">${field.desc}</div></div>`;
+          const linkIcon = field.link ? ` <a href="${field.link}" target="_blank" style="color:#888;margin-left:4px" title="打开 WebUI"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>` : '';
+          html += `<div><div class="cfg-label">${field.label}${linkIcon}</div><div class="cfg-desc">${field.desc}</div></div>`;
           html += `<div class="cfg-input-col">${renderField(field)}</div>`;
           html += `</div>`;
         }
