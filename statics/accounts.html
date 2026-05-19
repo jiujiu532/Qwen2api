@@ -61,7 +61,10 @@
         <thead><tr>
           <th>TOKEN</th>
           <th>运行状态</th>
+          <th>RPM</th>
+          <th>失败</th>
           <th>Email</th>
+          <th>创建时间</th>
           <th style="text-align:right">操作</th>
         </tr></thead>
         <tbody id="table-body"></tbody>
@@ -129,16 +132,24 @@
 
       const paged = filtered.slice((page-1)*pageSize, page*pageSize);
       document.getElementById('table-body').innerHTML = paged.length === 0
-        ? '<tr><td colspan="4" style="text-align:center;padding:48px;color:var(--fg-muted)">暂无账号</td></tr>'
+        ? '<tr><td colspan="7" style="text-align:center;padding:48px;color:var(--fg-muted)">暂无账号</td></tr>'
         : paged.map(a => `<tr>
           <td><span class="tok">${maskToken(a.token)}</span> <button class="row-btn" onclick="copyToken('${a.token}')"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></td>
           <td>${statusBadge(a.status)}</td>
+          <td style="font-size:12px;color:#666;font-variant-numeric:tabular-nums">${a.rpm_1min || 0}</td>
+          <td style="font-size:12px;color:${a.consecutive_failures > 0 ? 'var(--error)' : '#666'};font-variant-numeric:tabular-nums">${a.consecutive_failures || 0}</td>
           <td style="font-size:12px;color:#666">${a.email}</td>
+          <td style="font-size:11px;color:#999">${formatTime(a.created_at)}</td>
           <td style="text-align:right"><button class="row-btn" onclick="verify('${a.email}')" title="验证"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.6-4.6"/><path d="M4 4v5h5"/><path d="M4 13a8 8 0 0 0 14.6 4.6"/><path d="M20 20v-5h-5"/></svg></button> <button class="row-btn row-btn-danger" onclick="del('${a.email}')" title="删除"><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></td>
         </tr>`).join('');
     }
 
     function maskToken(t) { return t ? t.slice(0,10) + '...' + t.slice(-8) : '-' }
+    function formatTime(ts) {
+      if (!ts) return '—';
+      const d = new Date(ts * 1000);
+      return `${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getDate().toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+    }
     function statusBadge(s) {
       const m = { VALID:['active','正常'], RATE_LIMITED:['cooling','限流'], AUTH_ERROR:['invalid','异常'], BANNED:['invalid','封禁'], DISABLED:['disabled','禁用'] };
       const [cls, label] = m[s] || ['','未知'];
