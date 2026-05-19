@@ -206,6 +206,19 @@ async def root():
         "version": "2.0.0"
     }
 
+# ── 图片代理路由 ──────────────────────────────────────────────────────────────
+from fastapi.responses import Response
+from backend.services.image_proxy import get_cached_image
+
+@app.get("/proxy/image/{image_id}", include_in_schema=False)
+async def proxy_image(image_id: str):
+    """返回缓存的代理图片"""
+    entry = get_cached_image(image_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Image not found or expired")
+    return Response(content=entry["data"], media_type=entry["content_type"],
+                    headers={"Cache-Control": "public, max-age=3600"})
+
 # 托管前端构建产物（仅当 dist 存在时，即生产打包模式）
 FRONTEND_DIST = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "dist")
 if os.path.exists(FRONTEND_DIST):

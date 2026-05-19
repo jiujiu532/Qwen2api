@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     WORKERS: int = int(os.getenv("WORKERS", 3))
     ADMIN_KEY: str = os.getenv("ADMIN_KEY", "123456")  # 默认管理密钥
     REGISTER_SECRET: str = os.getenv("REGISTER_SECRET", "")
+    APP_URL: str = os.getenv("APP_URL", "")  # 应用对外 URL，用于图片代理等
     
     # MoeMail 自建配置
     MOEMAIL_DOMAIN: str = os.getenv("MOEMAIL_DOMAIN", "")
@@ -126,7 +127,7 @@ settings = Settings()
 # ── 运行时设置持久化（UI 层修改的设置保存到 config.json）──
 _RUNTIME_CONFIG_FILE = DATA_DIR / "runtime_settings.json"
 _PERSIST_KEYS = [
-    "ADMIN_KEY",
+    "ADMIN_KEY", "APP_URL",
     "AUTO_REPLENISH", "REPLENISH_TARGET", "REPLENISH_CONCURRENCY",
     "AUTO_REPLENISH_ON_EXHAUST", "REPLENISH_EXHAUST_COUNT", "REPLENISH_EXHAUST_CONCURRENCY",
     "MAX_INFLIGHT_PER_ACCOUNT", "MAX_RPM_PER_ACCOUNT", "MAX_TPM_PER_ACCOUNT",

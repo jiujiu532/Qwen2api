@@ -17,6 +17,7 @@ async def get_settings(_=Depends(_require_admin)):
     merged_aliases.update(MODEL_MAP)
     return {
         "admin_key": settings.ADMIN_KEY,
+        "app_url": getattr(settings, "APP_URL", ""),
         "max_inflight_per_account": settings.MAX_INFLIGHT_PER_ACCOUNT,
         "engine_mode": settings.ENGINE_MODE,
         "model_aliases": merged_aliases,
@@ -55,6 +56,7 @@ async def get_default_settings(_=Depends(_require_admin)):
     """返回所有配置项的默认值"""
     return {
         "admin_key": "123456",
+        "app_url": "",
         "max_inflight_per_account": 1,
         "engine_mode": "hybrid",
         "model_aliases": dict(DEFAULT_MODEL_ALIASES),
@@ -104,6 +106,8 @@ async def update_settings(request: Request, _=Depends(_require_admin)):
         if new_key:
             settings.ADMIN_KEY = new_key
             log.info("[Admin] ADMIN_KEY 已更新")
+    if "app_url" in body:
+        settings.APP_URL = str(body["app_url"]).strip()
     if "model_aliases" in body and isinstance(body["model_aliases"], dict):
         MODEL_MAP.update(body["model_aliases"])
     if "moemail_domain" in body:

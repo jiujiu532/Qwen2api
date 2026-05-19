@@ -251,6 +251,10 @@ async def _handle_t2i(request: Request, client: QwenClient, history_messages: li
                 aio.create_task(client.delete_chat(acc.token, chat_id))
                 image_urls = _extract_image_urls(answer_text)
                 content = "\n".join(f"![generated]({u})" for u in image_urls) if image_urls else answer_text
+                # 图片代理：如果配置了 app_url，替换为本地代理 URL
+                if content and settings.APP_URL:
+                    from backend.services.image_proxy import proxy_image_urls
+                    content = await proxy_image_urls(content, settings.APP_URL)
                 yield f"data: {mk({'role': 'assistant'})}\n\n"
                 yield f"data: {mk({'content': content})}\n\n"
                 yield f"data: {mk({}, 'stop')}\n\n"
@@ -269,6 +273,10 @@ async def _handle_t2i(request: Request, client: QwenClient, history_messages: li
             aio.create_task(client.delete_chat(acc.token, chat_id))
             image_urls = _extract_image_urls(answer_text)
             content = "\n".join(f"![generated]({u})" for u in image_urls) if image_urls else answer_text
+            # 图片代理：如果配置了 app_url，替换为本地代理 URL
+            if content and settings.APP_URL:
+                from backend.services.image_proxy import proxy_image_urls
+                content = await proxy_image_urls(content, settings.APP_URL)
             # 记录使用统计
             try:
                 um = request.app.state.usage_manager

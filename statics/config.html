@@ -346,7 +346,6 @@
     // 保存
     async function doSave() {
       const payload = { ...settings };
-      delete payload.app_url;
       delete payload.model_aliases;
       await fetch('/api/admin/settings', { method: 'PUT', headers: jsonHeaders(), body: JSON.stringify(payload) });
       // 如果密码被修改了，清除 session 强制重新登录
