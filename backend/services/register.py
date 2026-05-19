@@ -332,6 +332,21 @@ async def perform_batch_registration(
                 log.info(
                     f"[Register] 第{slot_num}/{count}槽 ✅ 注册成功，已入池 (总成功 {success_count})"
                 )
+                # 关闭新账号的记忆功能
+                try:
+                    import httpx
+                    headers = {
+                        "Authorization": f"Bearer {result['token']}",
+                        "Content-Type": "application/json",
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                        "Origin": "https://chat.qwen.ai",
+                    }
+                    body = {"memory": {"enable_memory": False, "enable_history_memory": False}}
+                    async with httpx.AsyncClient(timeout=10) as hc:
+                        await hc.post("https://chat.qwen.ai/api/v2/users/user/settings/update", headers=headers, json=body)
+                    log.info(f"[Register] 已关闭新账号记忆功能: {result['email']}")
+                except Exception:
+                    pass
             else:
                 fail_count += 1
                 log.warning(f"[Register] 第{slot_num}/{count}槽 ❌ 注册失败")

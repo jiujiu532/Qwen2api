@@ -134,6 +134,34 @@ class QwenClient:
             return
         await self.engine.api_call("DELETE", f"/api/v2/chats/{chat_id}", token)
 
+    async def disable_memory(self, token: str) -> bool:
+        """关闭账号的记忆功能（防止跨会话信息泄露）"""
+        if not token:
+            return False
+        try:
+            import httpx
+            from backend.services.auth_resolver import BASE_URL
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "Referer": "https://chat.qwen.ai/",
+                "Origin": "https://chat.qwen.ai",
+            }
+            body = {"memory": {"enable_memory": False, "enable_history_memory": False}}
+            async with httpx.AsyncClient(timeout=15) as hc:
+                resp = await hc.post(f"{BASE_URL}/api/v2/users/user/settings/update", headers=headers, json=body)
+            if resp.status_code == 200:
+                log.info(f"[QwenClient] 已关闭账号记忆功能")
+                return True
+            else:
+                log.warning(f"[QwenClient] 关闭记忆失败: status={resp.status_code}")
+                return False
+        except Exception as e:
+            log.warning(f"[QwenClient] 关闭记忆异常: {e}")
+            return False
+
     async def verify_token(self, token: str) -> bool:
         """Verify token validity via direct HTTP (no browser page needed)."""
         if not token:
