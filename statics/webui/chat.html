@@ -74,6 +74,12 @@
 
     .webui-footer{text-align:center;padding:4px 0 10px;font-size:10px;color:#c5c2bc}
 
+    /* Message actions */
+    .webui-msg-actions{display:flex;gap:8px;margin-top:8px;padding:2px 0}
+    .webui-msg-action{width:32px;height:32px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#999;transition:background .15s,color .15s}
+    .webui-msg-action:hover{background:#f0ede8;color:#333}
+    .webui-msg-action svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8}
+
     .typing-dots span{display:inline-block;width:5px;height:5px;border-radius:50%;background:#bbb;margin:0 2px;animation:tdot 1.4s infinite}
 
     /* Thinking/reasoning block - grok2api style */
@@ -238,9 +244,13 @@
         inner.innerHTML = `<div class="webui-empty"><div class="webui-empty-title">Web Chat</div><div class="webui-empty-text">输入一条消息开始新的会话。</div></div>`;
         return;
       }
-      inner.innerHTML = messages.map(m => {
+      inner.innerHTML = messages.map((m, i) => {
         if (m.role === 'user') return `<div class="webui-msg webui-msg-user"><div class="webui-bubble">${esc(m.content)}</div></div>`;
-        return `<div class="webui-msg webui-msg-assistant"><div class="webui-bubble">${formatAssistantMsg(m.reasoning, m.content)}</div></div>`;
+        const actionsHtml = m.content ? `<div class="webui-msg-actions">
+          <button class="webui-msg-action" onclick="regenerate(${i})" title="重新回答"><svg viewBox="0 0 24 24"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg></button>
+          <button class="webui-msg-action" onclick="copyContent(${i})" title="复制"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+        </div>` : '';
+        return `<div class="webui-msg webui-msg-assistant"><div class="webui-bubble">${formatAssistantMsg(m.reasoning, m.content)}</div>${actionsHtml}</div>`;
       }).join('');
       document.getElementById('thread').scrollTop = document.getElementById('thread').scrollHeight;
     }
@@ -426,6 +436,37 @@
       isStreaming = false;
       document.getElementById('send-btn').disabled = false;
     }
+    }
+
+    // 重新回答：删除该 assistant 消息，重新发送
+    async function regenerate(idx) {
+      if (isStreaming) return;
+      // 找到该 assistant 消息对应的 user 消息（前一条）
+      const userMsg = messages[idx - 1];
+      if (!userMsg || userMsg.role !== 'user') return;
+      const text = userMsg.content;
+      // 删除 user + assistant
+      messages.splice(idx - 1);
+      saveCurrentSession();
+      renderThread();
+      // 重新发送
+      document.getElementById('prompt').value = text;
+      sendMessage();
+    }
+
+    // 复制回答内容（不含思考过程）
+    function copyContent(idx) {
+      const msg = messages[idx];
+      if (!msg || !msg.content) return;
+      navigator.clipboard.writeText(msg.content).then(() => {
+        // 视觉反馈
+        const btns = document.querySelectorAll('.webui-msg-actions');
+        const actionRow = btns[Math.floor(idx / 2)]; // 大致定位
+        if (actionRow) {
+          const copyBtn = actionRow.querySelectorAll('.webui-msg-action')[1];
+          if (copyBtn) { copyBtn.style.color = '#16a34a'; setTimeout(() => { copyBtn.style.color = ''; }, 1500); }
+        }
+      });
     }
 
     function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
