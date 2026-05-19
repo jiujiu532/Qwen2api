@@ -121,6 +121,7 @@
             title: '自动补号', section: 'replenish',
             fields: [
               { key: 'auto_replenish', label: '启用自动补号', type: 'bool', desc: '账号耗尽时自动触发注册补充。' },
+              { key: 'replenish_provider', label: '补号渠道', type: 'select', options: [{value:'',label:'未选择（不补号）'},{value:'moemail',label:'MoeMail'},{value:'tempmail',label:'TempMail'},{value:'gptmail',label:'ChatGPT邮箱'},{value:'vipmail',label:'YYDS'},{value:'guerrilla',label:'GuerrillaMail'}], desc: '自动补号时使用的邮箱渠道。', showIf: 'auto_replenish' },
               { key: 'replenish_target', label: '目标账号数', type: 'number', desc: '池中账号低于此数时触发补号。', showIf: 'auto_replenish' },
             ]
           },

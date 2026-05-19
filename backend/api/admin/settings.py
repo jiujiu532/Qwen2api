@@ -30,6 +30,7 @@ async def get_settings(_=Depends(_require_admin)):
         "auto_replenish": settings.AUTO_REPLENISH,
         "replenish_target": settings.REPLENISH_TARGET,
         "replenish_concurrency": settings.REPLENISH_CONCURRENCY,
+        "replenish_provider": getattr(settings, "REPLENISH_PROVIDER", ""),
         "max_rpm_per_account": settings.MAX_RPM_PER_ACCOUNT,
         "max_tpm_per_account": settings.MAX_TPM_PER_ACCOUNT,
         "cache_ttl_seconds": settings.CACHE_TTL_SECONDS,
@@ -136,6 +137,8 @@ async def update_settings(request: Request, _=Depends(_require_admin)):
         settings.REPLENISH_TARGET = int(body["replenish_target"])
     if "replenish_concurrency" in body:
         settings.REPLENISH_CONCURRENCY = int(body["replenish_concurrency"])
+    if "replenish_provider" in body:
+        settings.REPLENISH_PROVIDER = str(body["replenish_provider"]).strip()
     if "max_rpm_per_account" in body:
         settings.MAX_RPM_PER_ACCOUNT = int(body["max_rpm_per_account"])
     if "max_tpm_per_account" in body:
