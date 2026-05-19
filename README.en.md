@@ -14,125 +14,138 @@
 </p>
 
 <p align="center">
-  Enterprise gateway that exposes Qwen AI as standard OpenAI / Anthropic / Gemini compatible APIs
+  Qwen AI Reverse Gateway -- OpenAI / Anthropic / Gemini API Compatible
 </p>
 
 <p align="center"><a href="README.md">中文</a> | English</p>
 
 ---
 
-## What is qwen2api
+## Overview
 
-qwen2api is a high-performance API gateway that converts Alibaba's Qwen AI into standard API formats. It features multi-account pool management, automatic registration, tool calling support, and streaming output. Compatible with Cherry Studio, Cursor, Claude Code, New-API, and other clients.
+qwen2api exposes Alibaba's Qwen (Tongyi Qianwen) web interface as standard API endpoints. It features multi-account pool rotation, automatic account registration, tool calling, streaming output, and works directly with Cherry Studio, Cursor, Claude Code, Cline, New-API, and other clients.
 
 ## Key Features
 
-| Feature | Description |
-|---------|-------------|
-| **Multi-Protocol** | OpenAI / Anthropic / Gemini / Responses API simultaneously |
-| **Account Pool** | Min-Heap scheduling, 6-state lifecycle, circuit breaker, adaptive rate limiting |
-| **Auto-Registration** | MoeMail / TempMail / GuerrillaMail automated Qwen account signup |
-| **Auto-Replenishment** | Emergency registration when accounts are exhausted |
-| **Tool Calling** | XML format parsing + anti-leak state machine + loop detection |
-| **Thinking Modes** | Auto / Thinking / Fast modes via model name suffix |
-| **Image Generation** | OpenAI DALL-E compatible endpoint powered by Qwen |
-| **Admin Dashboard** | Built-in web UI for monitoring, account management, and configuration |
-| **Multi-Engine** | httpx direct / Camoufox browser fingerprint / hybrid mode |
-| **Token Cleanup** | Automatic detection and removal of expired JWT tokens |
+- **Multi-protocol** -- OpenAI Chat Completions / Responses API / Anthropic Messages / Gemini generateContent
+- **Account pool scheduling** -- Min-Heap priority scheduling, 6-state lifecycle management, circuit breaker auto-fuse
+- **Auto registration** -- MoeMail / TempMail / GuerrillaMail channels, emergency registration on account exhaustion
+- **Tool calling** -- Native FC first + XML Fallback, streaming leak-prevention state machine, loop detection
+- **Thinking mode** -- Model name suffix control (-thinking / -nothinking) or reasoning_effort parameter override
+- **Image generation** -- OpenAI DALL-E compatible, auto-detects user intent and routes to T2I
+- **Admin panel** -- Built-in React Web UI with real-time SSE events, account/key/settings/stats management
+- **Multi-engine** -- httpx direct (fast) / Camoufox browser fingerprint (anti-detection) / hybrid mode
+- **Fault tolerance** -- Auto retry with account rotation on upstream failure, NativeBlock detection with XML fallback
 
-## Supported API Endpoints
+## Supported Endpoints
 
-| Protocol | Endpoint | Description |
-|----------|----------|-------------|
-| OpenAI | `POST /v1/chat/completions` | Chat completions (streaming/non-streaming) |
-| OpenAI | `POST /v1/responses` | Responses API (Codex/Agents) |
+| Protocol | Endpoint | Function |
+|----------|----------|----------|
+| OpenAI | `POST /v1/chat/completions` | Chat completion (stream/non-stream/tools/thinking) |
+| OpenAI | `POST /v1/responses` | Responses API (Codex / Agents) |
 | OpenAI | `POST /v1/images/generations` | Image generation |
+| OpenAI | `POST /v1/embeddings` | Text embeddings |
 | OpenAI | `GET /v1/models` | Model list |
-| Anthropic | `POST /v1/messages` | Claude compatible (with tool_use) |
-| Gemini | `POST /v1beta/models/{model}:generateContent` | Gemini compatible |
-| Gemini | `POST /v1beta/models/{model}:streamGenerateContent` | Gemini streaming |
-| System | `GET /healthz` | Health check |
+| Anthropic | `POST /v1/messages` | Claude compatible (tool_use / thinking) |
+| Gemini | `POST /v1beta/models/{m}:generateContent` | Gemini compatible |
+| Gemini | `POST /v1beta/models/{m}:streamGenerateContent` | Gemini streaming |
 
-## Built-in Models
+## Available Models
+
+### Native Qwen Models
 
 | Model | Description |
 |-------|-------------|
-| `qwen3.6-plus` | Primary model (auto thinking mode) |
-| `qwen3.6-plus-thinking` | Forced deep thinking |
-| `qwen3.6-plus-nothinking` | Fast mode, skip thinking |
-| `qwen3.6-max-preview` | High-performance preview |
-| `qwen3.6-max-preview-thinking` | High-performance + deep thinking |
-| `qwen3.6-max-preview-nothinking` | High-performance + fast mode |
+| `qwen3.6-plus` | Primary model, auto thinking |
+| `qwen3.6-plus-thinking` | Force deep thinking |
+| `qwen3.6-plus-nothinking` | Fast mode |
+| `qwen3.6-max-preview` | High performance preview |
 | `qwen3.6-27b` | Lightweight |
-| `qwen3.6-27b-thinking` | Lightweight + deep thinking |
-| `qwen3.6-27b-nothinking` | Lightweight + fast mode |
+| `qwen3.7-max-preview` | 3.7 series (thinking only) |
+| `qwen3.7-plus-preview` | 3.7 Plus preview |
 
-Also includes 39 built-in model aliases (gpt-4o, claude-3-5-sonnet, gemini-2.5-pro, etc.) that work out of the box.
+All models support `-thinking` / `-nothinking` suffix.
+
+### Built-in Aliases
+
+Use common model names directly without configuration:
+
+```
+gpt-4o / gpt-4o-mini / gpt-4.1 / gpt-3.5-turbo
+o1 / o3 / o3-mini / o4-mini
+claude-3-5-sonnet-latest / claude-sonnet-4-20250514 / claude-3-opus-latest
+gemini-2.5-pro / gemini-2.5-flash / gemini-2.0-flash
+deepseek-chat / deepseek-reasoner
+```
 
 ## Quick Start
 
 ### Docker (Recommended)
 
 ```bash
-docker pull ghcr.io/jiujiu532/qwen2api:latest
-
 docker run -d \
+  --name qwen2api \
   -p 7860:7860 \
   -e ADMIN_KEY=your-admin-key \
   -v ./data:/workspace/data \
   ghcr.io/jiujiu532/qwen2api:latest
 ```
 
-Or with docker-compose:
+docker-compose:
 
 ```bash
 cp .env.example .env
-# Edit .env to set ADMIN_KEY
+# Edit .env to set ADMIN_KEY and mail channels
 docker-compose up -d
 ```
 
-### Local Development
+### Local
 
 ```bash
-# Requires Python 3.12+
+# Python 3.12+
+pip install -r backend/requirements.txt
 python start.py
 ```
 
-Access `http://localhost:7860` for the admin dashboard. Default password: `123456`.
+Visit `http://localhost:7860` after startup. Default admin key: `123456`.
 
 ## Configuration
 
-Configure via `.env` file or environment variables:
+Via `.env` or environment variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ADMIN_KEY` | `123456` | Admin dashboard login key |
+| `ADMIN_KEY` | `123456` | Admin panel key |
 | `PORT` | `7860` | Service port |
-| `ENGINE_MODE` | `hybrid` | Engine: httpx / browser / hybrid |
-| `AUTO_REPLENISH` | `false` | Enable auto-registration |
+| `ENGINE_MODE` | `hybrid` | httpx / browser / hybrid |
+| `AUTO_REPLENISH` | `false` | Auto registration toggle |
 | `REPLENISH_TARGET` | `30` | Target account count |
-| `MOEMAIL_DOMAIN` | — | MoeMail domain (for auto-registration) |
-| `MOEMAIL_KEY` | — | MoeMail API key |
-| `PROXY_URL` | — | Proxy URL (for registration) |
+| `MOEMAIL_DOMAIN` | - | MoeMail domain |
+| `MOEMAIL_KEY` | - | MoeMail API key |
+| `TEMPMAIL_DOMAIN` | - | TempMail domain |
+| `TEMPMAIL_KEY` | - | TempMail API key |
+| `PROXY_URL` | - | Registration proxy URL |
+| `NATIVE_TOOL_PASSTHROUGH` | `true` | Prefer Qwen native FC |
+| `MAX_INFLIGHT_PER_ACCOUNT` | `1` | Max concurrent per account |
 
-See `.env.example` for full configuration.
+See [.env.example](.env.example) for full configuration.
 
-## Usage
+## Usage Examples
 
-### OpenAI Compatible
+### OpenAI Format
 
 ```bash
 curl http://localhost:7860/v1/chat/completions \
   -H "Authorization: Bearer your-api-key" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "qwen3.6-plus-nothinking",
+    "model": "qwen3.6-plus",
     "messages": [{"role": "user", "content": "Hello"}],
     "stream": true
   }'
 ```
 
-### Anthropic Compatible
+### Anthropic Format
 
 ```bash
 curl http://localhost:7860/v1/messages \
@@ -141,43 +154,64 @@ curl http://localhost:7860/v1/messages \
   -d '{
     "model": "claude-3-5-sonnet-latest",
     "messages": [{"role": "user", "content": "Hello"}],
-    "max_tokens": 1024
+    "max_tokens": 4096
   }'
 ```
 
-### Image Generation
+### Tool Calling
 
 ```bash
-curl http://localhost:7860/v1/images/generations \
+curl http://localhost:7860/v1/chat/completions \
   -H "Authorization: Bearer your-api-key" \
   -H "Content-Type: application/json" \
-  -d '{"prompt": "A cyberpunk cat", "n": 1, "size": "1024x1024"}'
+  -d '{
+    "model": "qwen3.6-plus-nothinking",
+    "messages": [{"role": "user", "content": "What is the weather in Beijing?"}],
+    "tools": [{"type": "function", "function": {"name": "get_weather", "parameters": {"type": "object", "properties": {"city": {"type": "string"}}}}}],
+    "stream": true
+  }'
 ```
-
-## Admin Dashboard
-
-Access `http://localhost:7860` for the admin panel:
-
-- **Overview**: Request count, token usage, RPM/TPM, health timeline
-- **Accounts**: Add/remove/verify accounts, batch import, JSON editor
-- **Registration**: Batch register new accounts with multiple email providers
-- **Settings**: Model mapping, engine mode, proxy config, auto-replenishment
-- **API Keys**: Generate and manage downstream API keys
 
 ## Project Structure
 
 ```
 qwen2api/
 ├── backend/
-│   ├── api/          # API endpoints (chat/anthropic/gemini/responses/images)
-│   ├── core/         # Core modules (account pool/config/engine/database)
-│   └── services/     # Business services (registration/Qwen client/tool parser)
-├── frontend/         # React admin dashboard
-├── data/             # Runtime data (accounts/config/stats)
-├── docker-compose.yml
+│   ├── api/              # Route layer (thin, parsing + formatting)
+│   │   ├── chat.py           # OpenAI Chat Completions
+│   │   ├── anthropic.py      # Anthropic Messages
+│   │   ├── gemini.py         # Gemini generateContent
+│   │   ├── responses.py      # OpenAI Responses API
+│   │   ├── images.py         # Image generation
+│   │   └── admin/            # Admin panel (accounts/keys/settings/stats)
+│   ├── engine/           # Core engine (business logic)
+│   │   └── completion.py     # Unified Completion Executor
+│   ├── core/             # Infrastructure
+│   │   ├── account_pool.py   # Account pool scheduling
+│   │   ├── config.py         # Configuration
+│   │   ├── auth.py           # API authentication
+│   │   └── hybrid_engine.py  # HTTP engine
+│   └── services/         # Business services
+│       ├── qwen_client.py    # Qwen upstream client
+│       ├── tool_parser.py    # Tool call parsing
+│       ├── prompt_builder.py # Prompt building
+│       └── register.py       # Auto registration
+├── frontend/             # React admin panel
+├── data/                 # Runtime data
 ├── Dockerfile
-└── start.py          # One-click startup script
+├── docker-compose.yml
+└── start.py
 ```
+
+## Client Integration
+
+| Client | Configuration |
+|--------|---------------|
+| Cherry Studio | API Base: `http://host:7860/v1`, model: `qwen3.6-plus` |
+| Cursor | Settings > Models > OpenAI API Base |
+| Claude Code | `ANTHROPIC_BASE_URL=http://host:7860` |
+| Cline | OpenAI Compatible, fill Base URL |
+| New-API | Add channel, type OpenAI, proxy URL = this service |
 
 ## License
 
