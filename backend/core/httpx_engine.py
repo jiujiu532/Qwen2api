@@ -75,6 +75,10 @@ class HttpxEngine:
             **self._auth_headers(token),
             "Content-Type": "application/json",
             "Accept": "text/event-stream",
+            "Accept-Encoding": "identity",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Origin": "https://chat.qwen.ai",
+            "Referer": "https://chat.qwen.ai/",
         }
         body_str = json.dumps(payload, ensure_ascii=False)
 
@@ -86,11 +90,20 @@ class HttpxEngine:
                         yield {"status": resp.status_code, "body": body_text}
                         return
 
-                    # httpx 的 aiter_lines 是真正的流式（逐行，不缓冲）
-                    async for line in resp.aiter_lines():
-                        if not line:
+                    # 使用 aiter_bytes 逐 chunk 读取（最底层，无缓冲）
+                    buffer = b""
+                    async for raw in resp.aiter_bytes():
+                        if not raw:
                             continue
-                        yield {"status": "streamed", "chunk": line + "\n"}
+                        buffer += raw
+                        while b"\n" in buffer:
+                            line_bytes, buffer = buffer.split(b"\n", 1)
+                            line = line_bytes.decode("utf-8", errors="replace").strip()
+                            if not line:
+                                continue
+                            yield {"status": "streamed", "chunk": line + "\n"}
+                    if buffer.strip():
+                        yield {"status": "streamed", "chunk": buffer.decode("utf-8", errors="replace").strip() + "\n"}
 
         except Exception as e:
             log.error(f"[HttpxEngine] fetch_chat error: {e}")
