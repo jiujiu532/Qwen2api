@@ -122,6 +122,13 @@
               { key: 'replenish_target', label: '目标账号数', type: 'number', desc: '池中账号低于此数时触发补号。', showIf: 'auto_replenish' },
             ]
           },
+          {
+            title: '日志配置', section: 'logging',
+            fields: [
+              { key: 'log_level', label: '文件日志等级', type: 'select', options: [{value:'DEBUG',label:'DEBUG'},{value:'INFO',label:'INFO'},{value:'WARNING',label:'WARNING'},{value:'ERROR',label:'ERROR'}], desc: '日志文件写入的最低等级，可独立于控制台配置。默认 INFO。' },
+              { key: 'log_max_days', label: '日志保留天数', type: 'number', desc: '按天轮转时最多保留的日志文件数量。默认 7。' },
+            ]
+          },
         ]
       },
       {

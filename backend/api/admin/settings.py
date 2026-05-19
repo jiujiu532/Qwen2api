@@ -39,6 +39,8 @@ async def get_settings(_=Depends(_require_admin)):
         "proxy_username": getattr(settings, "PROXY_USERNAME", ""),
         "proxy_password": getattr(settings, "PROXY_PASSWORD", ""),
         "default_stream": getattr(settings, "DEFAULT_STREAM", True),
+        "log_level": getattr(settings, "LOG_LEVEL", "INFO"),
+        "log_max_days": getattr(settings, "LOG_MAX_DAYS", 7),
     }
 
 
@@ -69,6 +71,8 @@ async def get_default_settings(_=Depends(_require_admin)):
         "proxy_username": "",
         "proxy_password": "",
         "default_stream": True,
+        "log_level": "INFO",
+        "log_max_days": 7,
     }
 
 
@@ -128,6 +132,10 @@ async def update_settings(request: Request, _=Depends(_require_admin)):
         settings.PROXY_PASSWORD = str(body["proxy_password"]).strip()
     if "default_stream" in body:
         settings.DEFAULT_STREAM = bool(body["default_stream"])
+    if "log_level" in body:
+        settings.LOG_LEVEL = str(body["log_level"]).upper()
+    if "log_max_days" in body:
+        settings.LOG_MAX_DAYS = max(1, int(body["log_max_days"]))
 
     save_runtime_settings()
     return {"ok": True}

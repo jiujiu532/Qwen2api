@@ -75,6 +75,10 @@ class Settings(BaseSettings):
     PROXY_USERNAME: str = os.getenv("PROXY_USERNAME", "")   # 为空则无需认证
     PROXY_PASSWORD: str = os.getenv("PROXY_PASSWORD", "")   # 为空则无需认证
 
+    # 日志配置
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+    LOG_MAX_DAYS: int = int(os.getenv("LOG_MAX_DAYS", 7))
+
 
     # 数据文件路径
     ACCOUNTS_FILE: str = os.getenv("ACCOUNTS_FILE", str(DATA_DIR / "accounts.json"))
@@ -119,6 +123,7 @@ _PERSIST_KEYS = [
     "CACHE_TTL_SECONDS", "RACING_ENABLED", "ENGINE_MODE", "DEFAULT_STREAM",
     "MOEMAIL_DOMAIN", "MOEMAIL_KEY", "TEMPMAIL_DOMAIN", "TEMPMAIL_KEY",
     "PROXY_ENABLED", "PROXY_URL", "PROXY_USERNAME", "PROXY_PASSWORD",
+    "LOG_LEVEL", "LOG_MAX_DAYS",
 ]
 
 def save_runtime_settings():
