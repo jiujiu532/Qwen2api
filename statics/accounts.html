@@ -16,7 +16,6 @@
         <div class="page-sub">管理 qwen2api 的 Qwen 账户池与运行状态</div>
       </div>
       <div class="page-actions">
-        <button class="btn btn-secondary" onclick="disableMemoryAll()" title="关闭所有账号的记忆功能">关闭记忆</button>
         <button class="btn btn-secondary" onclick="showImportModal()">导入</button>
         <button class="btn btn-primary" onclick="showAddModal()">+ 新增</button>
       </div>
@@ -81,6 +80,8 @@
         </div>
         <!-- 导出 -->
         <button class="toolbar-icon-btn" onclick="exportJSON()" title="导出"><svg viewBox="0 0 24 24" stroke-width="1.8"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></button>
+        <!-- 关闭记忆 -->
+        <button class="toolbar-icon-btn" onclick="disableMemory()" title="关闭记忆"><svg viewBox="0 0 24 24" stroke-width="1.8"><path d="M12 2a7 7 0 0 0-7 7c0 3 2 5.5 4 7.5.8.8 1.5 1.5 2 2.5h2c.5-1 1.2-1.7 2-2.5 2-2 4-4.5 4-7.5a7 7 0 0 0-7-7z"/><path d="M10 22h4"/><path d="m4 4 16 16" stroke-width="2"/></svg></button>
         <!-- 批量操作（选中后显示） -->
         <button class="toolbar-icon-btn" id="tb-verify" onclick="batchVerify()" title="验证选中" style="display:none"><svg viewBox="0 0 24 24" stroke-width="1.8"><path d="M20 11a8 8 0 0 0-14.6-4.6"/><path d="M4 4v5h5"/><path d="M4 13a8 8 0 0 0 14.6 4.6"/><path d="M20 20v-5h-5"/></svg></button>
         <button class="toolbar-icon-btn" id="tb-disable" onclick="batchDisable()" title="禁用选中" style="display:none"><svg viewBox="0 0 24 24" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><path d="M8.5 8.5 15.5 15.5"/></svg></button>
@@ -349,13 +350,37 @@
       fetchAccounts();
     }
 
-    async function disableMemoryAll() {
-      if (!confirm('确认关闭所有账号的记忆功能？这将遍历所有账号并调用 Qwen API，可能需要几分钟。')) return;
-      showToast('正在批量关闭记忆...');
+    async function disableMemory() {
+      const selected = getSelectedEmails();
+      let msg, endpoint;
+      if (selected.length > 0) {
+        msg = `确认关闭选中 ${selected.length} 个账号的记忆功能？此操作将关闭记忆开关并删除已有记忆数据，不可撤销。`;
+      } else {
+        msg = '确认关闭所有账号的记忆功能？此操作将遍历所有账号，关闭记忆开关并删除已有记忆数据，可能需要几分钟。';
+      }
+      if (!confirm(msg)) return;
+      showToast('正在关闭记忆...');
       try {
-        const r = await fetch('/api/admin/accounts/disable-memory', { method: 'POST', headers: authHeaders() });
-        const d = await r.json();
-        showToast(`完成: 成功 ${d.success} / 失败 ${d.failed} / 总计 ${d.total}`);
+        if (selected.length > 0) {
+          // 逐个关闭选中账号的记忆
+          let success = 0, failed = 0;
+          for (const email of selected) {
+            const acc = accounts.find(a => a.email === email);
+            if (!acc || !acc.token) { failed++; continue; }
+            try {
+              const headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + acc.token, 'User-Agent': 'Mozilla/5.0', 'Origin': 'https://chat.qwen.ai' };
+              await fetch('https://chat.qwen.ai/api/v2/users/user/settings/update', { method: 'POST', headers, body: JSON.stringify({memory:{enable_memory:false,enable_history_memory:false},tools_enabled:{history_retriever:false,bio:false}}) });
+              await fetch('https://chat.qwen.ai/api/v2/memories/delete', { method: 'POST', headers, body: JSON.stringify({forget_all:true}) });
+              success++;
+            } catch { failed++; }
+          }
+          showToast(`完成: 成功 ${success} / 失败 ${failed}`);
+        } else {
+          // 全部账号通过后端 API
+          const r = await fetch('/api/admin/accounts/disable-memory', { method: 'POST', headers: authHeaders() });
+          const d = await r.json();
+          showToast(`完成: 成功 ${d.success} / 失败 ${d.failed} / 总计 ${d.total}`);
+        }
       } catch (e) {
         showToast('操作失败: ' + e.message, 5000);
       }
