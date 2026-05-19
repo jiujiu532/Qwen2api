@@ -16,13 +16,6 @@
         <div class="page-sub">管理 qwen2api 的 Qwen 账户池与运行状态</div>
       </div>
       <div class="page-actions">
-        <div class="dropdown">
-          <button class="btn btn-secondary" id="btn-export" onclick="toggleExportMenu()">导出</button>
-          <div class="dropdown-menu" id="export-menu" style="display:none">
-            <button onclick="exportJSON()">导出 JSON</button>
-            <button onclick="exportTXT()">导出 TXT</button>
-          </div>
-        </div>
         <button class="btn btn-secondary" onclick="showImport()">导入</button>
         <button class="btn btn-primary" onclick="showImport()">+ 新增</button>
       </div>
@@ -52,6 +45,7 @@
       </div>
     </div>
 
+    <!-- Toolbar - grok2api style -->
     <div class="toolbar">
       <div class="toolbar-left">
         <button class="pagi-btn" onclick="prevPage()"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
@@ -59,7 +53,21 @@
         <button class="pagi-btn" onclick="nextPage()"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></button>
       </div>
       <div class="toolbar-right">
-        <div class="filter-bar" style="margin:0" id="filters"></div>
+        <!-- 筛选下拉 -->
+        <div class="dropdown" id="filter-dropdown" style="display:inline-flex">
+          <button class="toolbar-icon-btn" onclick="toggleFilterPanel()" title="筛选"><svg viewBox="0 0 24 24" stroke-width="1.8"><path d="M4 6h16"/><path d="M7 12h10"/><path d="M10 18h4"/></svg></button>
+          <div class="dropdown-menu" id="filter-panel" style="display:none;min-width:280px;padding:12px;right:0">
+            <div id="filter-chips-panel"></div>
+          </div>
+        </div>
+        <!-- 导出 -->
+        <button class="toolbar-icon-btn" onclick="exportJSON()" title="导出"><svg viewBox="0 0 24 24" stroke-width="1.8"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></button>
+        <!-- 批量操作（选中后显示） -->
+        <button class="toolbar-icon-btn" id="tb-verify" onclick="batchVerify()" title="验证选中" style="display:none"><svg viewBox="0 0 24 24" stroke-width="1.8"><path d="M20 11a8 8 0 0 0-14.6-4.6"/><path d="M4 4v5h5"/><path d="M4 13a8 8 0 0 0 14.6 4.6"/><path d="M20 20v-5h-5"/></svg></button>
+        <button class="toolbar-icon-btn" id="tb-disable" onclick="batchDisable()" title="禁用选中" style="display:none"><svg viewBox="0 0 24 24" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><path d="M8.5 8.5 15.5 15.5"/></svg></button>
+        <button class="toolbar-icon-btn" id="tb-restore" onclick="batchRestore()" title="恢复选中" style="display:none"><svg viewBox="0 0 24 24" stroke-width="1.8"><path d="M3 12a9 9 0 1 0 3-6.708"/><path d="M3 4v5h5"/></svg></button>
+        <button class="toolbar-icon-btn" id="tb-delete" onclick="batchDelete()" title="删除选中" style="display:none"><svg viewBox="0 0 24 24" stroke-width="1.8"><path d="M5 7h14"/><path d="M9 7V4h6v3"/><path d="M8 10v7"/><path d="M12 10v7"/><path d="M16 10v7"/><path d="M7 7l1 13h8l1-13"/></svg></button>
+        <!-- 每页数量 -->
         <select id="page-size-select" onchange="changePageSize(this.value)" style="height:28px;padding:0 8px;border-radius:999px;font-size:11px;background:#fafafa;border:0;color:#8f8f8f">
           <option value="50">50 / 页</option>
           <option value="100">100 / 页</option>
@@ -86,14 +94,6 @@
         </tr></thead>
         <tbody id="table-body"></tbody>
       </table>
-    </div>
-
-    <!-- Batch actions (shown when items selected) -->
-    <div id="batch-bar" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#111;color:#fff;padding:8px 16px;border-radius:999px;font-size:12px;font-weight:500;align-items:center;gap:12px;box-shadow:0 8px 24px rgba(0,0,0,.15)">
-      <span id="batch-count">0 个已选</span>
-      <button id="batch-verify-btn" onclick="batchVerify()" style="color:#fff;font-size:11px;font-weight:600;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.15)">批量验证</button>
-      <button id="batch-disable-btn" onclick="batchDisable()" style="color:#fbbf24;font-size:11px;font-weight:600;padding:4px 10px;border-radius:999px;background:rgba(251,191,36,.1)">批量禁用</button>
-      <button id="batch-delete-btn" onclick="batchDelete()" style="color:#ff6b6b;font-size:11px;font-weight:600;padding:4px 10px;border-radius:999px;background:rgba(255,100,100,.1)">批量删除</button>
     </div>
 
     <!-- Edit Modal -->
@@ -152,7 +152,7 @@
         <div class="stat-cell"><div class="stat-top"><span class="stat-label">禁用账户</span><span class="stat-icon" style="color:#6f675d"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M8.5 8.5 15.5 15.5"/></svg></span></div><div class="stat-num" style="color:#6f675d">${stats.disabled}</div></div>
       `;
 
-      // Filters
+      // Filters - render into dropdown panel
       const filters = [
         { key:'all', label:'全部', count:stats.total },
         { key:'active', label:'正常', count:stats.active },
@@ -160,9 +160,12 @@
         { key:'invalid', label:'异常', count:stats.invalid },
         { key:'disabled', label:'禁用', count:stats.disabled },
       ];
-      document.getElementById('filters').innerHTML = filters.map(f =>
-        `<button class="filter-chip ${filter===f.key?'active':''}" onclick="setFilter('${f.key}')">${f.label} <span class="filter-chip-count">${f.count}</span></button>`
-      ).join('');
+      document.getElementById('filter-chips-panel').innerHTML = `
+        <div style="font-size:11px;color:#999;margin-bottom:8px">状态</div>
+        <div class="filter-bar" style="margin:0;flex-wrap:wrap">${filters.map(f =>
+          `<button class="filter-chip ${filter===f.key?'active':''}" onclick="setFilter('${f.key}')">${f.label} <span class="filter-chip-count">${f.count}</span></button>`
+        ).join('')}</div>
+      `;
 
       // Filter + paginate
       let filtered = accounts;
@@ -250,13 +253,10 @@
     function updateBatchBar() {
       selectedEmails.clear();
       document.querySelectorAll('.row-check:checked').forEach(cb => selectedEmails.add(cb.dataset.email));
-      const bar = document.getElementById('batch-bar');
-      if (selectedEmails.size > 0) {
-        bar.style.display = 'flex';
-        document.getElementById('batch-count').textContent = selectedEmails.size + ' 个已选';
-      } else {
-        bar.style.display = 'none';
-      }
+      const show = selectedEmails.size > 0;
+      ['tb-verify','tb-disable','tb-restore','tb-delete'].forEach(id => {
+        document.getElementById(id).style.display = show ? '' : 'none';
+      });
     }
 
     function getSelectedEmails() {
@@ -288,18 +288,32 @@
       setBatchLoading(false);
     }
 
-    // 导出功能
-    function toggleExportMenu() {
-      const menu = document.getElementById('export-menu');
-      menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+    // 筛选面板切换
+    function toggleFilterPanel() {
+      const panel = document.getElementById('filter-panel');
+      panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
     }
-    // 点击其他地方关闭下拉
     document.addEventListener('click', (e) => {
+      if (!e.target.closest('#filter-dropdown')) {
+        document.getElementById('filter-panel').style.display = 'none';
+      }
       if (!e.target.closest('.dropdown')) {
         const menu = document.getElementById('export-menu');
         if (menu) menu.style.display = 'none';
       }
     });
+
+    // 批量恢复（将禁用账号恢复为 VALID）
+    async function batchRestore() {
+      const emails = getSelectedEmails();
+      if (!confirm(`确认恢复 ${emails.length} 个账号?`)) return;
+      for (const email of emails) {
+        await fetch('/api/admin/accounts/' + encodeURIComponent(email) + '/activate', { method: 'POST', headers: authHeaders() });
+      }
+      showToast(`已恢复 ${emails.length} 个`);
+      selectedEmails.clear();
+      fetchAccounts();
+    }
 
     function exportJSON() {
       if (accounts.length === 0) { showToast('无可导出数据'); return; }
@@ -384,27 +398,15 @@
       }
     }
 
-    // 批量禁用
     async function batchDisable() {
       const emails = getSelectedEmails();
       if (!confirm(`确认禁用 ${emails.length} 个账号?`)) return;
-      setBatchLoading(true);
-      try {
-        for (const email of emails) {
-          await fetch('/api/admin/accounts/' + encodeURIComponent(email) + '/disable', { method: 'POST', headers: authHeaders() });
-        }
-        showToast(`已禁用 ${emails.length} 个`);
-        selectedEmails.clear();
-        fetchAccounts();
-      } catch {
-        showToast('操作失败', 5000);
+      for (const email of emails) {
+        await fetch('/api/admin/accounts/' + encodeURIComponent(email) + '/disable', { method: 'POST', headers: authHeaders() });
       }
-      setBatchLoading(false);
-    }
-
-    function setBatchLoading(loading) {
-      const btns = document.querySelectorAll('#batch-bar button');
-      btns.forEach(b => { b.disabled = loading; b.style.opacity = loading ? '0.5' : '1'; });
+      showToast(`已禁用 ${emails.length} 个`);
+      selectedEmails.clear();
+      fetchAccounts();
     }
 
     init();
