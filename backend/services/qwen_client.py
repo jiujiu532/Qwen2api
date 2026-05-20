@@ -238,7 +238,8 @@ class QwenClient:
     def _build_payload(self, chat_id: str, model: str, content: str,
                         has_custom_tools: bool = False,
                         enable_native_fc: Optional[bool] = None,
-                        thinking: Optional[bool] = None) -> dict:
+                        thinking: Optional[bool] = None,
+                        files: list[dict] = None) -> dict:
         ts = int(time.time())
         # has_custom_tools=True: 关闭思考/搜索/插件（适用于任何工具调用模式）
         # enable_native_fc: 独立控制是否开启 Qwen 平台原生 function_calling
@@ -280,7 +281,7 @@ class QwenClient:
             "chat_id": chat_id, "chat_mode": "normal", "model": model, "parent_id": None,
             "messages": [{
                 "fid": str(uuid.uuid4()), "parentId": None, "childrenIds": [str(uuid.uuid4())],
-                "role": "user", "content": content, "user_action": "chat", "files": [],
+                "role": "user", "content": content, "user_action": "chat", "files": files or [],
                 "timestamp": ts, "models": [model], "chat_type": "t2t",
                 "feature_config": feature_config,
                 "extra": {"meta": {"subChatType": "t2t"}}, "sub_chat_type": "t2t", "parent_id": None,
@@ -425,7 +426,8 @@ class QwenClient:
                                               has_custom_tools: bool = False,
                                               xml_mode: bool = False,
                                               exclude_accounts: Optional[set[str]] = None,
-                                              thinking: Optional[bool] = None):
+                                              thinking: Optional[bool] = None,
+                                              files: list[dict] = None):
         """无感容灾重试逻辑：上游挂了自动换号"""
         exclude = set(exclude_accounts or set())
         # xml_mode: 有工具但不用 Qwen 原生 FC，用 XML prompt 注入
@@ -459,7 +461,7 @@ class QwenClient:
                         await asyncio.sleep(wait_s)
                 chat_id = await self.create_chat(acc.token, model)
                 self.active_chat_ids.add(chat_id)
-                payload = self._build_payload(chat_id, model, content, effective_has_tools, enable_native_fc, thinking)
+                payload = self._build_payload(chat_id, model, content, effective_has_tools, enable_native_fc, thinking, files=files)
                 log.info(
                     f"[重试 {attempt+1}/{settings.MAX_RETRIES}] 已创建会话：account={acc.email} chat_id={chat_id} "
                     f"engine={self.engine.__class__.__name__} function_calling={payload['messages'][0]['feature_config'].get('function_calling')} "

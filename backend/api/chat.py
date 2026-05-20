@@ -224,6 +224,24 @@ async def chat_completions(request: Request):
     if media_intent == "t2i":
         return await _handle_t2i(request, client, history_messages, model_name, stream)
 
+    # 多模态文件上传：检测 messages 中的 image_url 等多模态内容
+    uploaded_files = None
+    from backend.services.file_uploader import extract_files_from_messages, upload_files_concurrent
+    try:
+        file_data = await extract_files_from_messages(history_messages)
+        if file_data:
+            # 需要一个账号 token 来上传文件 — 从池中临时获取
+            _acc = await client.account_pool.acquire_wait(timeout=30)
+            if _acc:
+                try:
+                    uploaded = await upload_files_concurrent(_acc.token, file_data)
+                    uploaded_files = [f.to_payload() for f in uploaded]
+                    log.info(f"[OAI] 多模态文件上传完成: {len(uploaded)} 个文件")
+                finally:
+                    client.account_pool.release(_acc)
+    except Exception as e:
+        log.warning(f"[OAI] 多模态文件上传失败: {e}")
+
     # 调用统一执行器
     result = await completions(
         client=client,
@@ -234,6 +252,7 @@ async def chat_completions(request: Request):
         thinking=req_thinking,
         history_messages=history_messages,
         model_name=model_name,
+        files=uploaded_files,
     )
 
     if isinstance(result, dict):

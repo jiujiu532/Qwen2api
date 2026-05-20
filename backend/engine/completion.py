@@ -113,7 +113,8 @@ async def completions(
 
 async def _stream_items_with_keepalive(client, model: str, prompt: str,
                                        has_custom_tools: bool, xml_mode: bool = False,
-                                       exclude_accounts=None, thinking: bool = None):
+                                       exclude_accounts=None, thinking: bool = None,
+                                       files: list[dict] = None):
     """包装上游流式事件，添加 keepalive 心跳防止连接超时。"""
     queue: aio.Queue = aio.Queue()
 
@@ -122,7 +123,7 @@ async def _stream_items_with_keepalive(client, model: str, prompt: str,
             async for item in client.chat_stream_events_with_retry(
                 model, prompt, has_custom_tools=has_custom_tools,
                 xml_mode=xml_mode, exclude_accounts=exclude_accounts,
-                thinking=thinking
+                thinking=thinking, files=files
             ):
                 await queue.put(("item", item))
         except Exception as e:
@@ -212,6 +213,7 @@ async def completions(
     thinking: Optional[bool],
     history_messages: list,
     model_name: str = "",
+    files: list[dict] = None,
 ) -> "dict | AsyncGenerator[str, None]":
     """统一 completion 执行器。
 
@@ -225,18 +227,18 @@ async def completions(
             return _stream_with_tools(
                 client=client, model=model, prompt=prompt, tools=tools,
                 thinking=thinking, history_messages=history_messages,
-                model_name=model_name,
+                model_name=model_name, files=files,
             )
         else:
             return _stream_no_tools(
                 client=client, model=model, prompt=prompt,
-                thinking=thinking, model_name=model_name,
+                thinking=thinking, model_name=model_name, files=files,
             )
     else:
         return await _batch(
             client=client, model=model, prompt=prompt, tools=tools,
             thinking=thinking, history_messages=history_messages,
-            model_name=model_name,
+            model_name=model_name, files=files,
         )
 
 
@@ -246,7 +248,7 @@ async def completions(
 
 async def _stream_no_tools(
     *, client: QwenClient, model: str, prompt: str,
-    thinking: Optional[bool], model_name: str,
+    thinking: Optional[bool], model_name: str, files: list[dict] = None,
 ) -> AsyncGenerator[str, None]:
     """无工具流式：事件到来立即转发给客户端。"""
     completion_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
@@ -267,7 +269,8 @@ async def _stream_no_tools(
 
             async for item in _stream_items_with_keepalive(
                 client, model, current_prompt, has_custom_tools=False,
-                xml_mode=False, exclude_accounts=excluded_accounts, thinking=thinking
+                xml_mode=False, exclude_accounts=excluded_accounts, thinking=thinking,
+                files=files
             ):
                 if item["type"] == "keepalive":
                     yield ": keepalive\n\n"
@@ -383,6 +386,7 @@ async def _stream_no_tools(
 async def _stream_with_tools(
     *, client: QwenClient, model: str, prompt: str, tools: list[dict],
     thinking: Optional[bool], history_messages: list, model_name: str,
+    files: list[dict] = None,
 ) -> AsyncGenerator[str, None]:
     """有工具流式：缓冲所有事件，检测工具调用后一次性输出。"""
     completion_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
@@ -404,7 +408,7 @@ async def _stream_with_tools(
             async for item in _stream_items_with_keepalive(
                 client, model, current_prompt, has_custom_tools=True,
                 xml_mode=force_xml_mode, exclude_accounts=excluded_accounts,
-                thinking=thinking
+                thinking=thinking, files=files
             ):
                 if item["type"] == "keepalive":
                     yield ": keepalive\n\n"
@@ -559,6 +563,7 @@ async def _stream_with_tools(
 async def _batch(
     *, client: QwenClient, model: str, prompt: str, tools: list[dict],
     thinking: Optional[bool], history_messages: list, model_name: str,
+    files: list[dict] = None,
 ) -> dict:
     """非流式：收集所有事件，返回完整 OpenAI chat.completion 响应。"""
     completion_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
@@ -577,7 +582,7 @@ async def _batch(
             async for item in client.chat_stream_events_with_retry(
                 model, current_prompt, has_custom_tools=bool(tools),
                 xml_mode=force_xml_mode, exclude_accounts=excluded_accounts,
-                thinking=thinking
+                thinking=thinking, files=files
             ):
                 if item["type"] == "meta":
                     chat_id = item["chat_id"]
