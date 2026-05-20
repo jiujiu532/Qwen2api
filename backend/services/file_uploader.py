@@ -147,42 +147,45 @@ async def _get_sts_token(token: str, filename: str, filesize: int, filetype: str
 
 
 async def _upload_to_oss(sts_data: dict, file_bytes: bytes, mime_type: str) -> None:
-    """Step 2: PUT 文件到 OSS（使用 STS Token 认证）
+    """Step 2: PUT 文件到 OSS（使用 oss2 SDK + STS Token 认证）
     
-    官网实际使用的是 STS Token header 认证方式（非预签名 URL）。
-    构建简单路径 URL + x-oss-security-token header。
+    使用阿里云 oss2 SDK 处理 V4 签名，确保认证正确。
     """
-    bucket = sts_data.get("bucketname", "qwen-webui-prod")
+    import oss2
+    from io import BytesIO
+
+    access_key_id = sts_data.get("access_key_id", "")
+    access_key_secret = sts_data.get("access_key_secret", "")
+    security_token = sts_data.get("security_token", "")
+    bucket_name = sts_data.get("bucketname", "qwen-webui-prod")
     endpoint = sts_data.get("endpoint", "oss-accelerate.aliyuncs.com")
     file_path = sts_data.get("file_path", "")
-    security_token = sts_data.get("security_token", "")
+    region = sts_data.get("region", "ap-southeast-1")
 
-    # 构建上传 URL（不带签名参数）
-    upload_url = f"https://{bucket}.{endpoint}/{file_path}"
-
-    headers = {
-        "x-oss-security-token": security_token,
-        "Content-Type": mime_type,
-    }
+    if not all([access_key_id, access_key_secret, security_token, file_path]):
+        raise Exception("OSS upload: missing STS credentials")
 
     try:
-        async with httpx.AsyncClient(timeout=60) as client:
-            resp = await client.put(upload_url, headers=headers, content=file_bytes)
-        if resp.status_code in (200, 201, 204):
-            return
-        # STS 方式失败，尝试预签名 URL 方式
-        file_url = sts_data.get("file_url", "")
-        if file_url:
-            async with httpx.AsyncClient(timeout=60) as client:
-                resp = await client.put(file_url, content=file_bytes)
-            if resp.status_code in (200, 201, 204):
-                return
-        raise Exception(f"OSS upload failed: HTTP {resp.status_code} {resp.text[:200]}")
-    except httpx.TimeoutException:
-        raise Exception("OSS upload timeout")
+        auth = oss2.StsAuth(access_key_id, access_key_secret, security_token)
+        bucket = oss2.Bucket(
+            auth,
+            f"https://{endpoint}",
+            bucket_name,
+            region=region,
+        )
+        # 同步上传（oss2 不支持 async，用 to_thread 避免阻塞事件循环）
+        result = await asyncio.to_thread(
+            bucket.put_object,
+            file_path,
+            BytesIO(file_bytes),
+            headers={"Content-Type": mime_type},
+        )
+        if result.status not in (200, 201, 204):
+            raise Exception(f"OSS upload failed: status={result.status}")
     except Exception as e:
-        if "OSS upload failed" in str(e):
+        if "OSS upload" in str(e):
             raise
+        raise Exception(f"OSS upload error: {e}")
         raise Exception(f"OSS upload error: {e}")
 
 
