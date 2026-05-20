@@ -15,7 +15,7 @@ services:
     environment:
       PYTHONIOENCODING: utf-8
       PORT: "7860"
-      ENGINE_MODE: "hybrid"
+      ENGINE_MODE: "httpx"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:7860/healthz"]
       interval: 30s
