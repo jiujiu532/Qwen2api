@@ -256,8 +256,30 @@
       if (!file) { showToast('请选择文件'); return; }
       const text = await file.text();
       if (!text.trim()) { showToast('文件为空'); return; }
-      await fetch('/api/admin/accounts/batch', { method:'POST', headers:jsonHeaders(), body:JSON.stringify({tokens: text}) });
-      showToast('导入成功');
+
+      // 自动检测格式：JSON 数组用 accounts 字段，纯文本用 tokens 字段
+      let body;
+      try {
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed)) {
+          body = { accounts: parsed };
+        } else if (parsed.accounts) {
+          body = { accounts: parsed.accounts };
+        } else {
+          body = { tokens: text };
+        }
+      } catch (e) {
+        // 非 JSON，当作每行一个 token 的纯文本
+        body = { tokens: text };
+      }
+
+      const r = await fetch('/api/admin/accounts/batch', { method:'POST', headers:jsonHeaders(), body:JSON.stringify(body) });
+      const d = await r.json();
+      if (d.imported > 0) {
+        showToast('导入成功: ' + d.imported + ' 个账户');
+      } else {
+        showToast('导入失败: ' + (d.error || d.errors?.[0] || '未知错误'));
+      }
       hideImportModal();
       fileInput.value = '';
       fetchAccounts();
