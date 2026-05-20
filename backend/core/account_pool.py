@@ -679,7 +679,7 @@ class AccountPool:
                 log.error("[Replenish] 30分钟重试用尽，自动补号已停止")
 
     # ── 账号管理 ─────────────────────────────
-    async def add_account(self, email: str, password: str = "", token: str = "") -> Account:
+    async def add_account(self, email: str, password: str = "", token: str = "", skip_save: bool = False) -> Account:
         async with self._lock:
             for existing in self._accounts:
                 if existing.email == email:
@@ -690,17 +690,18 @@ class AccountPool:
                     return existing
             acc = Account(email=email, password=password, token=token)
             self._accounts.append(acc)
-        await self.save()
+        if not skip_save:
+            await self.save()
         self._event.set()
         return acc
 
-    async def remove_account(self, email: str, manual: bool = True) -> bool:
+    async def remove_account(self, email: str, manual: bool = True, skip_save: bool = False) -> bool:
         """删除账号。manual=True 表示用户手动操作，不触发补号。"""
         async with self._lock:
             before = len(self._accounts)
             self._accounts = [a for a in self._accounts if a.email != email]
             removed = len(self._accounts) < before
-        if removed:
+        if removed and not skip_save:
             await self.save()
             if not manual:
                 self._push_event("account_removed", f"账号 {email} 已自动移除")

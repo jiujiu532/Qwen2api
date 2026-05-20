@@ -82,7 +82,7 @@ async def batch_import_accounts(request: Request, _=Depends(_require_admin)):
                 errors.append(f"Item {i} ({email}): no token or password")
                 continue
             try:
-                await pool.add_account(email, password, token)
+                await pool.add_account(email, password, token, skip_save=True)
                 imported += 1
             except Exception as e:
                 errors.append(f"Item {i} ({email}): {e}")
@@ -99,7 +99,7 @@ async def batch_import_accounts(request: Request, _=Depends(_require_admin)):
                 continue
             email = f"token_{int(__import__('time').time())}_{i}@qwen"
             try:
-                await pool.add_account(email, "", token)
+                await pool.add_account(email, "", token, skip_save=True)
                 imported += 1
             except Exception as e:
                 errors.append(f"Line {i+1}: {e}")
@@ -130,12 +130,16 @@ async def batch_import_accounts(request: Request, _=Depends(_require_admin)):
             if not email:
                 email = f"line_{int(__import__('time').time())}_{i}@qwen"
             try:
-                await pool.add_account(email, password, token)
+                await pool.add_account(email, password, token, skip_save=True)
                 imported += 1
             except Exception as e:
                 errors.append(f"Line {i+1}: {e}")
     else:
         return JSONResponse({"ok": False, "error": "请提供 accounts、tokens 或 lines 字段"}, status_code=400)
+
+    # 批量操作完成后统一保存一次
+    if imported > 0:
+        await pool.save()
 
     return {"ok": imported > 0, "imported": imported, "errors": errors[:20], "total_in_pool": len(pool.all_accounts())}
 
@@ -147,6 +151,27 @@ async def delete_account(email: str, request: Request, _=Depends(_require_admin)
     if not removed:
         raise HTTPException(404, "Account not found")
     return {"ok": True}
+
+
+@router.post("/accounts/batch-delete")
+async def batch_delete_accounts(request: Request, _=Depends(_require_admin)):
+    """批量删除账号（一次性操作，只保存一次）"""
+    pool = request.app.state.account_pool
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON")
+    emails = body.get("emails", [])
+    if not emails:
+        return {"ok": False, "deleted": 0}
+    deleted = 0
+    for email in emails:
+        removed = await pool.remove_account(email, manual=True, skip_save=True)
+        if removed:
+            deleted += 1
+    if deleted > 0:
+        await pool.save()
+    return {"ok": True, "deleted": deleted}
 
 
 @router.post("/accounts/{email}/verify")

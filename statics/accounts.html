@@ -338,10 +338,9 @@
     async function batchDelete() {
       const emails = getSelectedEmails();
       if (!confirm(`确认删除 ${emails.length} 个账号?`)) return;
-      for (const email of emails) {
-        await fetch('/api/admin/accounts/'+encodeURIComponent(email), { method:'DELETE', headers:authHeaders() });
-      }
-      showToast(`已删除 ${emails.length} 个`);
+      const r = await fetch('/api/admin/accounts/batch-delete', { method:'POST', headers:jsonHeaders(), body:JSON.stringify({emails}) });
+      const d = await r.json();
+      showToast(`已删除 ${d.deleted || 0} 个`);
       selectedEmails.clear();
       fetchAccounts();
     }
