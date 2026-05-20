@@ -175,6 +175,11 @@ async def admin_root():
     from fastapi.responses import RedirectResponse
     return RedirectResponse("/admin/login")
 
+@app.get("/", include_in_schema=False)
+async def site_root():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse("/admin/login")
+
 # ── WebUI 路由 ──────────────────────────────────────────────────────────────
 WEBUI_DIR = STATICS_DIR / "webui"
 
