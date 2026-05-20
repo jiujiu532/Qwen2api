@@ -147,13 +147,14 @@ async def _get_sts_token(token: str, filename: str, filesize: int, filetype: str
 
 
 async def _upload_to_oss(file_url: str, file_bytes: bytes, mime_type: str) -> None:
-    """Step 2: PUT 文件到 OSS（使用预签名 URL）"""
-    headers = {
-        "Content-Type": mime_type,
-    }
+    """Step 2: PUT 文件到 OSS（使用预签名 URL）
+    
+    注意：预签名 URL 的签名已包含所有必要参数，不能添加额外 header，
+    否则会导致 SignatureDoesNotMatch 错误。
+    """
     try:
         async with httpx.AsyncClient(timeout=60) as client:
-            resp = await client.put(file_url, headers=headers, content=file_bytes)
+            resp = await client.put(file_url, content=file_bytes)
         if resp.status_code not in (200, 201, 204):
             raise Exception(f"OSS upload failed: HTTP {resp.status_code} {resp.text[:200]}")
     except httpx.TimeoutException:
