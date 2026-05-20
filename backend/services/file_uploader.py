@@ -51,24 +51,35 @@ class UploadedFile:
     def to_payload(self) -> dict:
         """转换为 Qwen chat payload 中 files 数组的元素格式"""
         file_class = _get_file_class(self.mime_type)
+        ts = int(time.time() * 1000)
         return {
             "type": "file",
             "file": {
-                "id": self.file_id,
+                "created_at": ts,
+                "data": {},
                 "filename": self.filename,
+                "hash": None,
+                "id": self.file_id,
                 "meta": {
                     "name": self.filename,
                     "size": self.size,
                     "content_type": self.mime_type,
                     "parse_meta": {"parse_status": "success"},
                 },
+                "update_at": ts,
             },
             "id": self.file_id,
             "url": self.url,
             "name": self.filename,
-            "file_type": self.mime_type,
-            "file_class": file_class,
+            "collection_name": "",
+            "progress": 0,
             "status": "uploaded",
+            "greenNet": "success",
+            "size": self.size,
+            "error": "",
+            "file_type": self.mime_type,
+            "showType": "image" if file_class == "image" else "file",
+            "file_class": file_class,
         }
 
 
