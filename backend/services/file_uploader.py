@@ -146,19 +146,44 @@ async def _get_sts_token(token: str, filename: str, filesize: int, filetype: str
             raise Exception("getstsToken timeout after 3 attempts")
 
 
-async def _upload_to_oss(file_url: str, file_bytes: bytes, mime_type: str) -> None:
-    """Step 2: PUT 文件到 OSS（使用预签名 URL）
+async def _upload_to_oss(sts_data: dict, file_bytes: bytes, mime_type: str) -> None:
+    """Step 2: PUT 文件到 OSS（使用 STS Token 认证）
     
-    注意：预签名 URL 的签名已包含所有必要参数，不能添加额外 header，
-    否则会导致 SignatureDoesNotMatch 错误。
+    官网实际使用的是 STS Token header 认证方式（非预签名 URL）。
+    构建简单路径 URL + x-oss-security-token header。
     """
+    bucket = sts_data.get("bucketname", "qwen-webui-prod")
+    endpoint = sts_data.get("endpoint", "oss-accelerate.aliyuncs.com")
+    file_path = sts_data.get("file_path", "")
+    security_token = sts_data.get("security_token", "")
+
+    # 构建上传 URL（不带签名参数）
+    upload_url = f"https://{bucket}.{endpoint}/{file_path}"
+
+    headers = {
+        "x-oss-security-token": security_token,
+        "Content-Type": mime_type,
+    }
+
     try:
         async with httpx.AsyncClient(timeout=60) as client:
-            resp = await client.put(file_url, content=file_bytes)
-        if resp.status_code not in (200, 201, 204):
-            raise Exception(f"OSS upload failed: HTTP {resp.status_code} {resp.text[:200]}")
+            resp = await client.put(upload_url, headers=headers, content=file_bytes)
+        if resp.status_code in (200, 201, 204):
+            return
+        # STS 方式失败，尝试预签名 URL 方式
+        file_url = sts_data.get("file_url", "")
+        if file_url:
+            async with httpx.AsyncClient(timeout=60) as client:
+                resp = await client.put(file_url, content=file_bytes)
+            if resp.status_code in (200, 201, 204):
+                return
+        raise Exception(f"OSS upload failed: HTTP {resp.status_code} {resp.text[:200]}")
     except httpx.TimeoutException:
         raise Exception("OSS upload timeout")
+    except Exception as e:
+        if "OSS upload failed" in str(e):
+            raise
+        raise Exception(f"OSS upload error: {e}")
 
 
 async def _trigger_parse(token: str, file_id: str) -> None:
@@ -236,7 +261,7 @@ async def upload_file(token: str, file_bytes: bytes, filename: str, mime_type: s
     log.info(f"[FileUploader] STS obtained: file_id={file_id} filename={filename} size={filesize}")
 
     # Step 2: 上传到 OSS
-    await _upload_to_oss(file_url, file_bytes, mime_type)
+    await _upload_to_oss(sts_data, file_bytes, mime_type)
     log.info(f"[FileUploader] OSS upload done: file_id={file_id}")
 
     # Step 3: 触发解析
