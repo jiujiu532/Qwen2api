@@ -164,6 +164,78 @@ def _extract_blocked_tool_names(text: str) -> list[str]:
     return re.findall(r"Tool\s+([A-Za-z0-9_.:-]+)\s+does not exists?\.?", text)
 
 
+def _parse_events_to_text(events: list[dict]) -> tuple[str, str, dict, list[str]]:
+    """从事件列表中解析出 answer_text, reasoning_text, native_tc_chunks, image_urls。
+    
+    支持 image_edit_tool phase（图生图场景）。
+    Returns: (answer_text, reasoning_text, native_tc_chunks, image_urls)
+    """
+    answer_text = ""
+    reasoning_text = ""
+    native_tc_chunks: dict = {}
+    image_urls: list[str] = []
+
+    for evt in events:
+        if evt.get("type") != "delta":
+            continue
+        phase = evt.get("phase", "")
+        content = evt.get("content", "")
+        extra = evt.get("extra", {}) or {}
+
+        # 从 extra 中提取图片 URL（image_edit_tool 完成后图片可能在这里）
+        if isinstance(extra, dict):
+            for key in ("image_url", "imageUrl", "url", "image"):
+                val = extra.get(key, "")
+                if isinstance(val, str) and val.startswith("http"):
+                    image_urls.append(val)
+            tool_result = extra.get("tool_result")
+            if isinstance(tool_result, list):
+                for item in tool_result:
+                    if isinstance(item, dict):
+                        for k in ("image", "url", "image_url", "src"):
+                            v = item.get(k, "")
+                            if isinstance(v, str) and v.startswith("http"):
+                                image_urls.append(v)
+                    elif isinstance(item, str) and item.startswith("http"):
+                        image_urls.append(item)
+
+        if phase in ("think", "thinking_summary") and content:
+            reasoning_text += content
+        elif phase == "answer" and content:
+            answer_text += content
+        elif phase == "image_edit_tool" and content:
+            # image_edit_tool 的 content 可能包含图片信息或文本描述
+            answer_text += content
+        elif phase == "tool_call" and content:
+            tc_id = extra.get("tool_call_id", "tc_0")
+            if tc_id not in native_tc_chunks:
+                native_tc_chunks[tc_id] = {"name": "", "args": ""}
+            try:
+                chunk = json.loads(content)
+                if "name" in chunk:
+                    native_tc_chunks[tc_id]["name"] = chunk["name"]
+                if "arguments" in chunk:
+                    native_tc_chunks[tc_id]["args"] += chunk["arguments"]
+            except (json.JSONDecodeError, ValueError):
+                native_tc_chunks[tc_id]["args"] += content
+        if evt.get("status") == "finished" and phase == "answer":
+            break
+
+    # 如果从事件中提取到了图片 URL，附加到 answer_text
+    if image_urls:
+        # 去重
+        seen = set()
+        unique_urls = []
+        for u in image_urls:
+            if u not in seen and u not in answer_text:
+                seen.add(u)
+                unique_urls.append(u)
+        for url in unique_urls:
+            answer_text += f"\n![image]({url})"
+
+    return answer_text, reasoning_text, native_tc_chunks, image_urls
+
+
 def _has_recent_unchanged_read_result(messages) -> bool:
     """检查最近消息中是否有 'Unchanged since last read' 结果。"""
     checked = 0
@@ -295,6 +367,22 @@ async def _stream_no_tools(
                 phase = evt.get("phase", "")
                 content = evt.get("content", "")
                 reasoning = evt.get("reasoning_content", "")
+                extra = evt.get("extra", {}) or {}
+
+                # 从 extra 中提取图片 URL（图生图场景）
+                if isinstance(extra, dict):
+                    for _ek in ("image_url", "imageUrl", "url"):
+                        _ev = extra.get(_ek, "")
+                        if isinstance(_ev, str) and _ev.startswith("http") and not content:
+                            content = f"![image]({_ev})"
+                    _tr = extra.get("tool_result")
+                    if isinstance(_tr, list):
+                        for _ti in _tr:
+                            if isinstance(_ti, dict):
+                                for _tk in ("image", "url", "image_url"):
+                                    _tv = _ti.get(_tk, "")
+                                    if isinstance(_tv, str) and _tv.startswith("http") and not content:
+                                        content = f"![image]({_tv})"
 
                 # 思考内容透传（thought 实时流 + thinking_summary 摘要都透传）
                 if (phase == "thought" or phase == "thinking_summary" or reasoning) and not content:
@@ -314,8 +402,8 @@ async def _stream_no_tools(
                     streamed_len += len(delta_reasoning)
                     continue
 
-                # 正文内容 — 打字机效果：将上游快速到达的 chunks 拆分为小批量逐字输出
-                if (phase == "answer" or content) and content:
+                # 正文内容 — 打字机效果（也处理 image_edit_tool phase 的内容输出）
+                if (phase in ("answer", "image_edit_tool") or content) and content:
                     if not sent_role:
                         yield f"data: {json.dumps({'id': completion_id, 'object': 'chat.completion.chunk', 'created': created, 'model': model_name, 'choices': [{'index': 0, 'delta': {'role': 'assistant'}, 'finish_reason': None}]}, ensure_ascii=False)}\n\n"
                         sent_role = True
@@ -594,33 +682,8 @@ async def _batch(
                     if item["event"].get("usage"):
                         upstream_usage = item["event"]["usage"]
 
-            # 解析事件
-            answer_text = ""
-            reasoning_text = ""
-            native_tc_chunks: dict = {}
-            for evt in events:
-                if evt["type"] != "delta":
-                    continue
-                phase = evt.get("phase", "")
-                content = evt.get("content", "")
-                if phase in ("think", "thinking_summary") and content:
-                    reasoning_text += content
-                elif phase == "answer" and content:
-                    answer_text += content
-                elif phase == "tool_call" and content:
-                    tc_id = evt.get("extra", {}).get("tool_call_id", "tc_0")
-                    if tc_id not in native_tc_chunks:
-                        native_tc_chunks[tc_id] = {"name": "", "args": ""}
-                    try:
-                        chunk = json.loads(content)
-                        if "name" in chunk:
-                            native_tc_chunks[tc_id]["name"] = chunk["name"]
-                        if "arguments" in chunk:
-                            native_tc_chunks[tc_id]["args"] += chunk["arguments"]
-                    except (json.JSONDecodeError, ValueError):
-                        native_tc_chunks[tc_id]["args"] += content
-                if evt.get("status") == "finished" and phase == "answer":
-                    break
+            # 解析事件（支持 image_edit_tool 图生图场景）
+            answer_text, reasoning_text, native_tc_chunks, _ = _parse_events_to_text(events)
 
             # 原生 TC 转为 answer_text（兼容后续解析）
             if native_tc_chunks and not answer_text:
@@ -815,33 +878,8 @@ async def completions_raw(
                     if item["event"].get("usage"):
                         upstream_usage = item["event"]["usage"]
 
-            # 解析事件
-            answer_text = ""
-            reasoning_text = ""
-            native_tc_chunks: dict = {}
-            for evt in events:
-                if evt["type"] != "delta":
-                    continue
-                phase = evt.get("phase", "")
-                content = evt.get("content", "")
-                if phase in ("think", "thinking_summary") and content:
-                    reasoning_text += content
-                elif phase == "answer" and content:
-                    answer_text += content
-                elif phase == "tool_call" and content:
-                    tc_id = evt.get("extra", {}).get("tool_call_id", "tc_0")
-                    if tc_id not in native_tc_chunks:
-                        native_tc_chunks[tc_id] = {"name": "", "args": ""}
-                    try:
-                        chunk = json.loads(content)
-                        if "name" in chunk:
-                            native_tc_chunks[tc_id]["name"] = chunk["name"]
-                        if "arguments" in chunk:
-                            native_tc_chunks[tc_id]["args"] += chunk["arguments"]
-                    except (json.JSONDecodeError, ValueError):
-                        native_tc_chunks[tc_id]["args"] += content
-                if evt.get("status") == "finished" and phase == "answer":
-                    break
+            # 解析事件（支持 image_edit_tool 图生图场景）
+            answer_text, reasoning_text, native_tc_chunks, _ = _parse_events_to_text(events)
 
             # 原生 TC 转为 answer_text
             if native_tc_chunks and not answer_text:
