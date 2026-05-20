@@ -366,6 +366,31 @@ async def edit_image(request: Request):
             })
 
         data = [{"url": url, "revised_prompt": prompt} for url in urls[:n]]
+
+        # 处理 response_format（Cherry Studio 图生图要求 b64_json）
+        response_format = "url"
+        if "multipart" in content_type:
+            response_format = (form.get("response_format", "url") if 'form' in dir() else "url")
+        else:
+            response_format = body.get("response_format", "url") if isinstance(body, dict) else "url"
+
+        if response_format == "b64_json" and urls:
+            import httpx as _hx2
+            import base64 as _b642
+            b64_data = []
+            async with _hx2.AsyncClient(timeout=30, follow_redirects=True) as hc:
+                for url in urls[:n]:
+                    try:
+                        resp = await hc.get(url)
+                        if resp.status_code == 200:
+                            b64 = _b642.b64encode(resp.content).decode()
+                            b64_data.append({"b64_json": b64, "revised_prompt": prompt})
+                        else:
+                            b64_data.append({"url": url, "revised_prompt": prompt})
+                    except Exception:
+                        b64_data.append({"url": url, "revised_prompt": prompt})
+            data = b64_data
+
         return JSONResponse({"created": int(time.time()), "data": data})
 
     except Exception as e:
