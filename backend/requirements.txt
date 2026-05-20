@@ -6,3 +6,4 @@ camoufox[geoip]
 tiktoken
 curl_cffi
 psutil
+oss2
