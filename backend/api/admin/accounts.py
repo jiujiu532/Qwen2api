@@ -363,6 +363,9 @@ async def disable_memory_all(request: Request, _=Depends(_require_admin)):
             if not acc.token:
                 failed += 1
                 return
+            if acc.memory_disabled:
+                success += 1  # 已关闭，跳过
+                return
             try:
                 headers = {
                     "Authorization": f"Bearer {acc.token}",
@@ -384,6 +387,7 @@ async def disable_memory_all(request: Request, _=Depends(_require_admin)):
                         return
                     await hc.post("https://chat.qwen.ai/api/v2/memories/delete", headers=headers, json={"forget_all": True})
                 success += 1
+                acc.memory_disabled = True
             except Exception:
                 failed += 1
 
@@ -402,6 +406,9 @@ async def disable_memory_all(request: Request, _=Depends(_require_admin)):
 
         yield f"data: {json.dumps({'done': total, 'total': total, 'success': success, 'failed': failed, 'complete': True})}\n\n"
         log.info(f"[Admin] 批量关闭记忆完成: success={success} failed={failed}")
+        # 保存 memory_disabled 状态
+        if success > 0:
+            await pool.save()
 
     return StreamingResponse(_stream_progress(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

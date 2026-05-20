@@ -163,6 +163,8 @@
         cooling: accounts.filter(a => a.status === 'RATE_LIMITED').length,
         invalid: accounts.filter(a => ['AUTH_ERROR','BANNED'].includes(a.status)).length,
         disabled: accounts.filter(a => a.status === 'DISABLED').length,
+        mem_off: accounts.filter(a => a.memory_disabled).length,
+        mem_on: accounts.filter(a => !a.memory_disabled).length,
       };
 
       document.getElementById('stats').innerHTML = `
@@ -180,6 +182,8 @@
         { key:'cooling', label:'限流', count:stats.cooling },
         { key:'invalid', label:'异常', count:stats.invalid },
         { key:'disabled', label:'禁用', count:stats.disabled },
+        { key:'mem_off', label:'已关记忆', count:stats.mem_off },
+        { key:'mem_on', label:'未关记忆', count:stats.mem_on },
       ];
       document.getElementById('filter-chips-panel').innerHTML = `
         <div style="display:flex;align-items:center;gap:10px">
@@ -196,6 +200,8 @@
       else if (filter === 'cooling') filtered = accounts.filter(a => a.status === 'RATE_LIMITED');
       else if (filter === 'invalid') filtered = accounts.filter(a => ['AUTH_ERROR','BANNED'].includes(a.status));
       else if (filter === 'disabled') filtered = accounts.filter(a => a.status === 'DISABLED');
+      else if (filter === 'mem_off') filtered = accounts.filter(a => a.memory_disabled);
+      else if (filter === 'mem_on') filtered = accounts.filter(a => !a.memory_disabled);
 
       const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
       if (page > totalPages) page = totalPages;

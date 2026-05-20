@@ -43,7 +43,7 @@ class Account:
         "status", "inflight",
         "rate_limited_until", "rate_limit_count",
         "consecutive_failures", "circuit_open_count", "circuit_open_until",
-        "activation_pending", "last_error", "last_request_started",
+        "activation_pending", "memory_disabled", "last_error", "last_request_started",
         "rpm_window", "tpm_window",
         "learned_max_rpm", "learned_max_tpm",
         "created_at", "warmup_until",
@@ -64,6 +64,7 @@ class Account:
         self.circuit_open_count = 0
         self.circuit_open_until = 0.0
         self.activation_pending = False
+        self.memory_disabled = False
         self.last_error = ""
         self.last_request_started = 0.0
         # 滑动窗口
@@ -158,6 +159,7 @@ class Account:
             "consecutive_failures": self.consecutive_failures,
             "circuit_open_count": self.circuit_open_count,
             "activation_pending": self.activation_pending,
+            "memory_disabled": self.memory_disabled,
             "last_error": self.last_error,
             "learned_max_rpm": self.learned_max_rpm,
             "learned_max_tpm": self.learned_max_tpm,
@@ -185,6 +187,7 @@ class Account:
             status=status,
         )
         acc.activation_pending = d.get("activation_pending", False)
+        acc.memory_disabled = d.get("memory_disabled", False)
         acc.last_error = d.get("last_error", "") or d.get("status_text", "")
         acc.rate_limit_count = d.get("rate_limit_count", 0)
         acc.consecutive_failures = d.get("consecutive_failures", 0)
