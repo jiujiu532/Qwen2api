@@ -136,12 +136,14 @@ async def anthropic_messages(request: Request):
     completion_id = f"msg_{uuid.uuid4().hex[:24]}"
     log.info(f"[Anthropic] model={qwen_model} stream={stream} tools={[t['name'] for t in tool_defs]}")
 
-    # 多模态文件上传（用原始 Anthropic messages 提取，因为转换后 image block 会丢失）
+    # 多模态文件上传（用原始 Anthropic messages 提取）
     uploaded_files = None
-    from backend.services.file_uploader import extract_files_from_messages, upload_files_concurrent
+    from backend.services.file_uploader import extract_files_from_messages, upload_files_concurrent, _resolve_image_url
+    import base64 as _b64
     raw_messages = req.get("messages", [])
-    # 将 Anthropic 格式的 image block 转为 OpenAI 格式以便 extract_files_from_messages 处理
+    # 将 Anthropic 格式的各种 block 转为统一格式以便提取
     _oai_for_extract = []
+    _direct_files = []  # 直接提取的文件 (bytes, filename, mime)
     for msg in raw_messages:
         role = msg.get("role", "user")
         content = msg.get("content", "")
@@ -150,12 +152,35 @@ async def anthropic_messages(request: Request):
             for block in content:
                 btype = block.get("type", "")
                 if btype == "image":
-                    # Anthropic: {"type":"image","source":{"type":"base64","media_type":"image/png","data":"..."}}
                     source = block.get("source", {})
                     if source.get("type") == "base64":
                         data_uri = f"data:{source.get('media_type','image/png')};base64,{source.get('data','')}"
                         blocks.append({"type": "image_url", "image_url": {"url": data_uri}})
                     elif source.get("type") == "url":
+                        blocks.append({"type": "image_url", "image_url": {"url": source.get("url", "")}})
+                elif btype == "document":
+                    # Anthropic document: {"type":"document","source":{"type":"base64","media_type":"application/pdf","data":"..."}}
+                    source = block.get("source", {})
+                    if source.get("type") == "base64":
+                        mime = source.get("media_type", "application/octet-stream")
+                        data = source.get("data", "")
+                        if data:
+                            fb = _b64.b64decode(data)
+                            fn = block.get("name", f"document.{mime.split('/')[-1]}")
+                            _direct_files.append((fb, fn, mime))
+                    elif source.get("type") == "url":
+                        blocks.append({"type": "image_url", "image_url": {"url": source.get("url", "")}})
+                elif btype == "file":
+                    # Cherry Studio file attachment
+                    source = block.get("source", block)
+                    if source.get("type") == "base64":
+                        mime = source.get("media_type", "application/octet-stream")
+                        data = source.get("data", "")
+                        if data:
+                            fb = _b64.b64decode(data)
+                            fn = block.get("name", f"file.{mime.split('/')[-1]}")
+                            _direct_files.append((fb, fn, mime))
+                    elif "url" in source:
                         blocks.append({"type": "image_url", "image_url": {"url": source.get("url", "")}})
                 elif btype == "text":
                     blocks.append(block)
@@ -165,6 +190,7 @@ async def anthropic_messages(request: Request):
             _oai_for_extract.append({"role": role, "content": content})
     try:
         file_data = await extract_files_from_messages(_oai_for_extract)
+        file_data.extend(_direct_files)
         if file_data:
             _acc = await client.account_pool.acquire_wait(timeout=30)
             if _acc:

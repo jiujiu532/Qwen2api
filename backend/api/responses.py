@@ -183,13 +183,47 @@ async def openai_responses(request: Request):
     created = int(time.time())
     log.info(f"[Responses] model={qwen_model} stream={stream} tools={[t['name'] for t in tool_defs]}")
 
-    # 多模态文件上传（从原始 input 和转换后的 messages 中提取）
+    # 多模态文件上传（从原始 input 提取）
     uploaded_files = None
     from backend.services.file_uploader import extract_files_from_messages, upload_files_concurrent
-    # Responses API 的 input 可能包含 image_url block
-    # 转换后的 messages 应该保留了 image_url，直接用 messages 提取
+    import base64 as _b64
+    _direct_files = []
+    raw_input = req.get("input", [])
+    # 从原始 input 中提取文件（支持 input_image、image_url、file 等格式）
+    _oai_for_extract = []
+    if isinstance(raw_input, list):
+        for item in raw_input:
+            if not isinstance(item, dict):
+                continue
+            role = item.get("role", "user")
+            content = item.get("content", "")
+            if isinstance(content, list):
+                blocks = []
+                for block in content:
+                    if not isinstance(block, dict):
+                        continue
+                    btype = block.get("type", "")
+                    if btype == "image_url":
+                        blocks.append(block)
+                    elif btype == "input_image":
+                        # Responses API: {"type":"input_image","image_url":"data:..."}
+                        url = block.get("image_url", "")
+                        if url:
+                            blocks.append({"type": "image_url", "image_url": {"url": url}})
+                    elif btype == "file":
+                        # File attachment
+                        file_data_field = block.get("file", {})
+                        if isinstance(file_data_field, dict) and file_data_field.get("data"):
+                            mime = file_data_field.get("mime_type", "application/octet-stream")
+                            fb = _b64.b64decode(file_data_field["data"])
+                            fn = file_data_field.get("name", f"file.bin")
+                            _direct_files.append((fb, fn, mime))
+                if blocks:
+                    _oai_for_extract.append({"role": role, "content": blocks})
+    # 也从转换后的 messages 中提取（兜底）
     try:
-        file_data = await extract_files_from_messages(messages)
+        file_data = await extract_files_from_messages(_oai_for_extract or messages)
+        file_data.extend(_direct_files)
         if file_data:
             _acc = await client.account_pool.acquire_wait(timeout=30)
             if _acc:
