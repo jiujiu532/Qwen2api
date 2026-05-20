@@ -25,7 +25,7 @@ from backend.core.hybrid_engine import HybridEngine
 from backend.core.account_pool import AccountPool
 from backend.core.health_snapshot import HealthSnapshotManager
 from backend.services.qwen_client import QwenClient
-from backend.api import admin, chat, probes, anthropic, gemini, embeddings, images, responses
+from backend.api import admin, chat, probes, anthropic, embeddings, images, responses
 from backend.services.garbage_collector import garbage_collect_chats
 from backend.services.log_manager import setup_log_capturing
 
@@ -139,7 +139,6 @@ app.include_router(chat.router, tags=["OpenAI Compatible"])
 app.include_router(responses.router, tags=["OpenAI Responses API"])
 app.include_router(images.router, tags=["Image Generation"])
 app.include_router(anthropic.router, tags=["Claude Compatible"])
-app.include_router(gemini.router, tags=["Gemini Compatible"])
 app.include_router(embeddings.router, tags=["Embeddings"])
 app.include_router(probes.router, tags=["Probes"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Dashboard Admin"])

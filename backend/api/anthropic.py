@@ -136,11 +136,35 @@ async def anthropic_messages(request: Request):
     completion_id = f"msg_{uuid.uuid4().hex[:24]}"
     log.info(f"[Anthropic] model={qwen_model} stream={stream} tools={[t['name'] for t in tool_defs]}")
 
-    # 多模态文件上传
+    # 多模态文件上传（用原始 Anthropic messages 提取，因为转换后 image block 会丢失）
     uploaded_files = None
     from backend.services.file_uploader import extract_files_from_messages, upload_files_concurrent
+    raw_messages = req.get("messages", [])
+    # 将 Anthropic 格式的 image block 转为 OpenAI 格式以便 extract_files_from_messages 处理
+    _oai_for_extract = []
+    for msg in raw_messages:
+        role = msg.get("role", "user")
+        content = msg.get("content", "")
+        if isinstance(content, list):
+            blocks = []
+            for block in content:
+                btype = block.get("type", "")
+                if btype == "image":
+                    # Anthropic: {"type":"image","source":{"type":"base64","media_type":"image/png","data":"..."}}
+                    source = block.get("source", {})
+                    if source.get("type") == "base64":
+                        data_uri = f"data:{source.get('media_type','image/png')};base64,{source.get('data','')}"
+                        blocks.append({"type": "image_url", "image_url": {"url": data_uri}})
+                    elif source.get("type") == "url":
+                        blocks.append({"type": "image_url", "image_url": {"url": source.get("url", "")}})
+                elif btype == "text":
+                    blocks.append(block)
+            if blocks:
+                _oai_for_extract.append({"role": role, "content": blocks})
+        else:
+            _oai_for_extract.append({"role": role, "content": content})
     try:
-        file_data = await extract_files_from_messages(messages)
+        file_data = await extract_files_from_messages(_oai_for_extract)
         if file_data:
             _acc = await client.account_pool.acquire_wait(timeout=30)
             if _acc:

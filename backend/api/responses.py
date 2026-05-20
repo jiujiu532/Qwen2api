@@ -183,9 +183,11 @@ async def openai_responses(request: Request):
     created = int(time.time())
     log.info(f"[Responses] model={qwen_model} stream={stream} tools={[t['name'] for t in tool_defs]}")
 
-    # 多模态文件上传
+    # 多模态文件上传（从原始 input 和转换后的 messages 中提取）
     uploaded_files = None
     from backend.services.file_uploader import extract_files_from_messages, upload_files_concurrent
+    # Responses API 的 input 可能包含 image_url block
+    # 转换后的 messages 应该保留了 image_url，直接用 messages 提取
     try:
         file_data = await extract_files_from_messages(messages)
         if file_data:
