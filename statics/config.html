@@ -326,7 +326,7 @@
       try {
         const resp = await fetch('/api/admin/settings/test-proxy', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('admin_token') },
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('qwen2api_key') },
         });
         const data = await resp.json();
         if (data.success) {
