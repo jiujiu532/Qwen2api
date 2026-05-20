@@ -181,6 +181,7 @@
               { key: 'proxy_url', label: '代理地址', type: 'text', desc: '格式: http://host:port 或 socks5://host:port', showIf: 'proxy_enabled' },
               { key: 'proxy_username', label: '用户名', type: 'text', desc: '代理认证用户名（可选）。', showIf: 'proxy_enabled' },
               { key: 'proxy_password', label: '密码', type: 'password', desc: '代理认证密码（可选）。', showIf: 'proxy_enabled' },
+              { key: '_proxy_test', label: '测试代理', type: 'button', btnLabel: '测试连接', desc: '测试代理是否可正常连接到 Qwen。', showIf: 'proxy_enabled', action: 'testProxy' },
             ]
           },
           {
@@ -285,6 +286,8 @@
           return `<textarea class="cfg-text" style="width:100%;min-height:300px;text-align:left;font-family:var(--font-mono);font-size:12px;line-height:1.6;resize:vertical;padding:12px" data-key="${field.key}" oninput="onInput(this)">${json}</textarea>`;
         case 'info':
           return `<span style="font-size:11px;color:var(--success);font-weight:500">可用 (Fallback)</span>`;
+        case 'button':
+          return `<button class="btn btn-primary" style="font-size:12px;padding:6px 16px" onclick="${field.action}()">${field.btnLabel || '执行'}</button><span id="result-${field.key}" style="margin-left:10px;font-size:11px"></span>`;
         default:
           return '';
       }
@@ -312,6 +315,31 @@
             </div>
           </div>`).join('')}
       </div>`;
+    }
+
+    // 测试代理连接
+    async function testProxy() {
+      const resultEl = document.getElementById('result-_proxy_test');
+      if (!resultEl) return;
+      resultEl.textContent = '测试中...';
+      resultEl.style.color = '#888';
+      try {
+        const resp = await fetch('/api/admin/settings/test-proxy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('admin_token') },
+        });
+        const data = await resp.json();
+        if (data.success) {
+          resultEl.textContent = '连接成功 (' + (data.latency_ms || 0) + 'ms)';
+          resultEl.style.color = '#22c55e';
+        } else {
+          resultEl.textContent = '失败: ' + (data.error || '未知错误');
+          resultEl.style.color = '#ef4444';
+        }
+      } catch (e) {
+        resultEl.textContent = '请求失败: ' + e.message;
+        resultEl.style.color = '#ef4444';
+      }
     }
 
     // 输入变更处理

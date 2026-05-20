@@ -186,3 +186,47 @@ async def update_settings(request: Request, _=Depends(_require_admin)):
 
     save_runtime_settings()
     return {"ok": True}
+
+
+@router.post("/settings/test-proxy")
+async def test_proxy(_=Depends(_require_admin)):
+    """测试代理连接是否正常（通过代理访问 Qwen API）"""
+    import time
+    import httpx
+
+    proxy_url = getattr(settings, "PROXY_URL", "").strip()
+    if not proxy_url:
+        return {"success": False, "error": "未配置代理地址"}
+
+    # 构建代理 URL（含认证）
+    username = getattr(settings, "PROXY_USERNAME", "").strip()
+    password = getattr(settings, "PROXY_PASSWORD", "").strip()
+    if username and password:
+        # 在 URL 中注入认证信息
+        from urllib.parse import urlparse, urlunparse
+        parsed = urlparse(proxy_url)
+        proxy_url = urlunparse(parsed._replace(netloc=f"{username}:{password}@{parsed.hostname}:{parsed.port or ''}"))
+
+    target_url = "https://chat.qwen.ai/api/v1/auths/"
+    t0 = time.time()
+
+    try:
+        async with httpx.AsyncClient(
+            proxy=proxy_url,
+            timeout=15,
+            verify=False,
+        ) as client:
+            resp = await client.get(target_url, headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Accept": "application/json",
+            })
+        latency_ms = int((time.time() - t0) * 1000)
+
+        if resp.status_code in (200, 401, 403):
+            # 能到达 Qwen 服务器就算成功（401/403 说明到了但没认证）
+            return {"success": True, "latency_ms": latency_ms, "status_code": resp.status_code}
+        else:
+            return {"success": False, "error": f"HTTP {resp.status_code}", "latency_ms": latency_ms}
+    except Exception as e:
+        latency_ms = int((time.time() - t0) * 1000)
+        return {"success": False, "error": str(e)[:200], "latency_ms": latency_ms}
