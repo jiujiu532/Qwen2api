@@ -251,3 +251,123 @@ async def create_image(request: Request):
         else:
             detail = f"图片生成失败: {err_str[:200]}"
         raise HTTPException(status_code=500, detail=detail)
+
+
+@router.post("/v1/images/edits")
+@router.post("/images/edits")
+async def edit_image(request: Request):
+    """
+    OpenAI 兼容的图片编辑接口（图生图）。
+
+    接收图片 + prompt，通过 Qwen 多模态对话实现图生图。
+    Cherry Studio 等客户端的图生图功能会调用此端点。
+    """
+    from backend.core.config import settings
+    from backend.services.file_uploader import upload_file, _guess_extension
+    import base64
+
+    client: QwenClient = request.app.state.qwen_client
+
+    # 鉴权
+    from backend.core.auth import verify_api_key
+    verify_api_key(request)
+
+    # 解析请求（支持 JSON 和 multipart/form-data）
+    content_type = request.headers.get("content-type", "")
+    prompt = ""
+    image_bytes = None
+    image_mime = "image/png"
+    size = "1024x1024"
+    n = 1
+
+    if "multipart" in content_type:
+        form = await request.form()
+        prompt = form.get("prompt", "")
+        size = form.get("size", "1024x1024")
+        n = int(form.get("n", "1"))
+        image_file = form.get("image")
+        if image_file and hasattr(image_file, "read"):
+            image_bytes = await image_file.read()
+            image_mime = getattr(image_file, "content_type", "image/png") or "image/png"
+    else:
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(400, "Invalid request body")
+        prompt = body.get("prompt", "").strip()
+        size = body.get("size", "1024x1024")
+        n = int(body.get("n", 1))
+        # image 可能是 base64 字符串或 URL
+        image_data = body.get("image", "")
+        if isinstance(image_data, str) and image_data:
+            if image_data.startswith("data:"):
+                header, data = image_data.split(",", 1)
+                image_mime = header.split(":")[1].split(";")[0]
+                image_bytes = base64.b64decode(data)
+            elif image_data.startswith("http"):
+                import httpx as _hx
+                async with _hx.AsyncClient(timeout=30, follow_redirects=True) as hc:
+                    resp = await hc.get(image_data)
+                    if resp.status_code == 200:
+                        image_bytes = resp.content
+                        image_mime = resp.headers.get("content-type", "image/png").split(";")[0]
+
+    if not prompt:
+        raise HTTPException(400, "prompt is required")
+
+    log.info(f"[T2I-Edit] prompt={prompt[:80]!r}, has_image={image_bytes is not None}, size={size}")
+
+    # 如果有图片，上传到 OSS 并通过多模态对话实现图生图
+    uploaded_files = None
+    if image_bytes:
+        try:
+            acc = await client.account_pool.acquire_wait(timeout=30)
+            if acc:
+                try:
+                    filename = f"edit_input{_guess_extension(image_mime)}"
+                    uploaded = await upload_file(acc.token, image_bytes, filename, image_mime)
+                    uploaded_files = [uploaded.to_payload()]
+                finally:
+                    client.account_pool.release(acc)
+        except Exception as e:
+            log.warning(f"[T2I-Edit] image upload failed: {e}")
+
+    # 使用多模态对话方式实现图生图
+    from backend.engine.completion import completions
+    from backend.services.prompt_builder import messages_to_prompt
+
+    # 构建消息
+    messages = [{"role": "user", "content": prompt}]
+    oai_req = {"messages": messages}
+    built_prompt, _ = messages_to_prompt(oai_req)
+
+    try:
+        result = await completions(
+            client=client,
+            model="qwen3.6-plus",
+            prompt=built_prompt,
+            tools=[],
+            stream=False,
+            thinking=True,
+            history_messages=messages,
+            model_name="qwen-image",
+            files=uploaded_files,
+        )
+
+        # 从响应中提取图片 URL
+        answer_text = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+        urls = _extract_image_urls(answer_text)
+
+        if not urls:
+            # 没有提取到图片 URL，返回文本响应
+            return JSONResponse({
+                "created": int(time.time()),
+                "data": [{"url": "", "revised_prompt": answer_text[:200]}]
+            })
+
+        data = [{"url": url, "revised_prompt": prompt} for url in urls[:n]]
+        return JSONResponse({"created": int(time.time()), "data": data})
+
+    except Exception as e:
+        log.error(f"[T2I-Edit] failed: {e}")
+        raise HTTPException(500, f"Image edit failed: {str(e)[:200]}")
