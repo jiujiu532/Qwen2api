@@ -7,3 +7,4 @@ tiktoken
 curl_cffi
 psutil
 oss2
+python-multipart
